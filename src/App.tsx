@@ -9,14 +9,15 @@ import {
   type Utilisateur,
 } from './api';
 import Agenda from './Agenda';
+import Factures from './Factures';
 import './App.css';
 
 function App() {
   // Utilisateur connecté (null = écran de connexion)
   const [utilisateur, setUtilisateur] = useState<Utilisateur | null>(null);
 
-  // Vue courante : liste des patients ou agenda des rendez-vous
-  const [vue, setVue] = useState<'patients' | 'agenda'>('patients');
+  // Vue courante
+  const [vue, setVue] = useState<'patients' | 'agenda' | 'factures'>('patients');
 
   // Champs de l'écran de connexion
   const [email, setEmail] = useState('');
@@ -193,7 +194,11 @@ function App() {
           <h1>Kliniko</h1>
         </div>
         <p className="subtitle">
-          {vue === 'patients' ? 'Gestion des patients' : 'Agenda des rendez-vous'}
+          {vue === 'patients'
+            ? 'Gestion des patients'
+            : vue === 'agenda'
+              ? 'Agenda des rendez-vous'
+              : 'Facturation et caisse'}
         </p>
         <p className="muted" style={{ marginTop: 4 }}>
           Connecté : {utilisateur.prenom} {utilisateur.nom} (
@@ -228,11 +233,22 @@ function App() {
               Agenda
             </button>
           )}
+          {aPermission('facture.lire') && (
+            <button
+              type="button"
+              style={ongletStyle(vue === 'factures')}
+              onClick={() => setVue('factures')}
+            >
+              Factures
+            </button>
+          )}
         </div>
       </header>
       <main className="content">
         {vue === 'agenda' ? (
           <Agenda onSessionExpiree={() => setUtilisateur(null)} />
+        ) : vue === 'factures' ? (
+          <Factures onSessionExpiree={() => setUtilisateur(null)} />
         ) : (
           <>
             {aPermission('patient.creer') && (

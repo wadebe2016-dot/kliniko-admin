@@ -239,3 +239,100 @@ export async function annulerRendezVous(id: string): Promise<RendezVous> {
   }
   return res.json();
 }
+
+// ---------------------------------------------------------------------------
+// Facturation
+// ---------------------------------------------------------------------------
+
+export type Acte = {
+  id: string;
+  code: string;
+  libelle: string;
+  tarif: number | null;
+  devise: string;
+};
+
+export type StatutFacture = 'ouverte' | 'partielle' | 'reglee' | 'annulee';
+
+export type LigneFacture = {
+  id: string;
+  libelle: string;
+  quantite: number;
+  prixUnitaire: string | number;
+  montant: string | number;
+};
+
+export type Paiement = {
+  id: string;
+  montant: string | number;
+  moyen: 'especes' | 'mobile_money';
+  datePaiement: string;
+};
+
+export type Facture = {
+  id: string;
+  numero: string;
+  dateFacture: string;
+  montantTotal: string | number;
+  montantPaye: string | number;
+  devise: string;
+  statut: StatutFacture;
+  patient: { nom: string; prenom: string | null; numeroDossier: string };
+  lignes?: LigneFacture[];
+  paiements?: Paiement[];
+};
+
+// Catalogue des actes avec tarif en vigueur
+export async function getActes(): Promise<Acte[]> {
+  const res = await appelApi('/actes');
+  if (!res.ok) throw new Error('Erreur lors du chargement des actes');
+  return res.json();
+}
+
+// Lister les factures
+export async function getFactures(): Promise<Facture[]> {
+  const res = await appelApi('/factures');
+  if (!res.ok) throw new Error('Erreur lors du chargement des factures');
+  return res.json();
+}
+
+// Detail d'une facture (lignes + paiements)
+export async function getFacture(id: string): Promise<Facture> {
+  const res = await appelApi(`/factures/${id}`);
+  if (!res.ok) throw new Error('Erreur lors du chargement de la facture');
+  return res.json();
+}
+
+// Creer une facture a partir d'actes du catalogue
+export async function createFacture(data: {
+  patientId: string;
+  lignes: { acteId: string; quantite?: number }[];
+}): Promise<Facture> {
+  const res = await appelApi('/factures', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    throw new Error(
+      await messageErreur(res, 'Erreur lors de la creation de la facture'),
+    );
+  }
+  return res.json();
+}
+
+// Encaisser un paiement sur une facture
+export async function encaisserFacture(
+  id: string,
+  data: { montant: number; moyen: 'especes' | 'mobile_money' },
+): Promise<Facture> {
+  const res = await appelApi(`/factures/${id}/paiements`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    throw new Error(await messageErreur(res, "Erreur lors de l'encaissement"));
+  }
+  return res.json();
+}
