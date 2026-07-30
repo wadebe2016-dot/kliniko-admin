@@ -401,3 +401,18 @@ export async function updateConsultation(
   }
   return res.json();
 }
+
+// Demander a l'IA une proposition de compte-rendu pour une consultation
+export async function suggererCompteRendu(
+  id: string,
+): Promise<{ suggestion: string }> {
+  const res = await appelApi(`/consultations/${id}/suggestion`, {
+    method: 'POST',
+  });
+  if (!res.ok) {
+    throw new Error(
+      await messageErreur(res, "L'assistant IA est indisponible"),
+    );
+  }
+  return res.json();
+}

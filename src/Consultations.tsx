@@ -5,6 +5,7 @@ import {
   getConsultations,
   getPatients,
   getRendezVous,
+  suggererCompteRendu,
   updateConsultation,
   type Consultation,
   type Patient,
@@ -51,6 +52,7 @@ function Consultations({ onSessionExpiree }: Props) {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveOk, setSaveOk] = useState(false);
+  const [iaEnCours, setIaEnCours] = useState(false);
 
   function gererErreur(e: Error, poserErreur: (m: string) => void) {
     if (e.message.includes('reconnecter')) {
@@ -145,6 +147,23 @@ function Consultations({ onSessionExpiree }: Props) {
       gererErreur(err as Error, setSaveError);
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleSuggestionIa() {
+    if (!detail) return;
+    setIaEnCours(true);
+    setSaveError(null);
+    setSaveOk(false);
+    try {
+      const { suggestion } = await suggererCompteRendu(detail.id);
+      // La proposition remplit la zone d'observations :
+      // le praticien la relit, la corrige, puis enregistre (= validation).
+      setEditObservations(suggestion);
+    } catch (err) {
+      gererErreur(err as Error, setSaveError);
+    } finally {
+      setIaEnCours(false);
     }
   }
 
@@ -325,10 +344,24 @@ function Consultations({ onSessionExpiree }: Props) {
               <div className="field">
                 <label>Observations</label>
                 <textarea
-                  rows={5}
+                  rows={8}
                   value={editObservations}
                   onChange={(e) => setEditObservations(e.target.value)}
                 />
+                <button
+                  type="button"
+                  onClick={handleSuggestionIa}
+                  disabled={iaEnCours}
+                  style={{
+                    alignSelf: 'flex-start',
+                    padding: '4px 12px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {iaEnCours
+                    ? 'Rédaction en cours…'
+                    : '✨ Suggérer un compte-rendu (IA)'}
+                </button>
               </div>
               <div className="field">
                 <label>Diagnostic</label>
