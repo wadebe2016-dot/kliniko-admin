@@ -336,3 +336,68 @@ export async function encaisserFacture(
   }
   return res.json();
 }
+
+// ---------------------------------------------------------------------------
+// Consultations (dossier medical)
+// ---------------------------------------------------------------------------
+
+export type Consultation = {
+  id: string;
+  patientId: string;
+  dateConsultation: string;
+  motif: string | null;
+  observations: string | null;
+  diagnostic: string | null;
+  patient: { nom: string; prenom: string | null; numeroDossier: string };
+  praticien: { nom: string; prenom: string | null; specialite: string | null } | null;
+  rendezVous: { debut: string; statut: string } | null;
+};
+
+// Lister les consultations, filtrables par patient
+export async function getConsultations(
+  patientId?: string,
+): Promise<Consultation[]> {
+  const q = patientId ? `?patientId=${patientId}` : '';
+  const res = await appelApi(`/consultations${q}`);
+  if (!res.ok) throw new Error('Erreur lors du chargement des consultations');
+  return res.json();
+}
+
+// Creer une consultation (liee ou non a un rendez-vous)
+export async function createConsultation(data: {
+  patientId: string;
+  rendezVousId?: string;
+  motif?: string;
+  observations?: string;
+  diagnostic?: string;
+}): Promise<Consultation> {
+  const res = await appelApi('/consultations', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    throw new Error(
+      await messageErreur(res, 'Erreur lors de la creation de la consultation'),
+    );
+  }
+  return res.json();
+}
+
+// Completer ou corriger une consultation
+export async function updateConsultation(
+  id: string,
+  data: { motif?: string; observations?: string; diagnostic?: string },
+): Promise<Consultation> {
+  const res = await appelApi(`/consultations/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    throw new Error(
+      await messageErreur(res, 'Erreur lors de la mise a jour'),
+    );
+  }
+  return res.json();
+}
