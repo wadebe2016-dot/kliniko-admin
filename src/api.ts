@@ -73,6 +73,13 @@ async function appelApi(
   return res;
 }
 
+// Extrait un message d'erreur lisible d'une reponse API
+async function messageErreur(res: Response, defaut: string): Promise<string> {
+  const err = await res.json().catch(() => ({}));
+  if (Array.isArray(err.message)) return err.message.join(', ');
+  return err.message || defaut;
+}
+
 // ---------------------------------------------------------------------------
 // Patients
 // ---------------------------------------------------------------------------
@@ -148,8 +155,87 @@ export async function createPatient(data: NewPatient): Promise<Patient> {
     body: JSON.stringify(corps),
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.message || 'Erreur lors de la creation du patient');
+    throw new Error(
+      await messageErreur(res, 'Erreur lors de la creation du patient'),
+    );
   }
   return versPatient(await res.json());
+}
+
+// ---------------------------------------------------------------------------
+// Rendez-vous
+// ---------------------------------------------------------------------------
+
+export type StatutRdv = 'planifie' | 'confirme' | 'honore' | 'annule' | 'absent';
+
+export type RendezVous = {
+  id: string;
+  patientId: string;
+  debut: string;
+  fin: string | null;
+  statut: StatutRdv;
+  origine: 'clinique' | 'patient';
+  motif: string | null;
+  patient: { nom: string; prenom: string | null; numeroDossier: string };
+};
+
+// Lister les rendez-vous, periode optionnelle (dates ISO)
+export async function getRendezVous(
+  du?: string,
+  au?: string,
+): Promise<RendezVous[]> {
+  const params = new URLSearchParams();
+  if (du) params.set('du', du);
+  if (au) params.set('au', au);
+  const q = params.toString();
+  const res = await appelApi(`/rendez-vous${q ? '?' + q : ''}`);
+  if (!res.ok) throw new Error('Erreur lors du chargement des rendez-vous');
+  return res.json();
+}
+
+// Creer un rendez-vous
+export async function createRendezVous(data: {
+  patientId: string;
+  debut: string;
+  fin?: string;
+  motif?: string;
+}): Promise<RendezVous> {
+  const res = await appelApi('/rendez-vous', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    throw new Error(
+      await messageErreur(res, 'Erreur lors de la creation du rendez-vous'),
+    );
+  }
+  return res.json();
+}
+
+// Changer le statut d'un rendez-vous (confirme, honore, absent...)
+export async function changerStatutRendezVous(
+  id: string,
+  statut: StatutRdv,
+): Promise<RendezVous> {
+  const res = await appelApi(`/rendez-vous/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ statut }),
+  });
+  if (!res.ok) {
+    throw new Error(
+      await messageErreur(res, 'Erreur lors du changement de statut'),
+    );
+  }
+  return res.json();
+}
+
+// Annuler un rendez-vous (changement de statut cote serveur)
+export async function annulerRendezVous(id: string): Promise<RendezVous> {
+  const res = await appelApi(`/rendez-vous/${id}`, { method: 'DELETE' });
+  if (!res.ok) {
+    throw new Error(await messageErreur(res, "Erreur lors de l'annulation"));
+  }
+  return res.json();
 }

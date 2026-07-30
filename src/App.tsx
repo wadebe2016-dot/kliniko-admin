@@ -8,11 +8,15 @@ import {
   type Patient,
   type Utilisateur,
 } from './api';
+import Agenda from './Agenda';
 import './App.css';
 
 function App() {
   // Utilisateur connecté (null = écran de connexion)
   const [utilisateur, setUtilisateur] = useState<Utilisateur | null>(null);
+
+  // Vue courante : liste des patients ou agenda des rendez-vous
+  const [vue, setVue] = useState<'patients' | 'agenda'>('patients');
 
   // Champs de l'écran de connexion
   const [email, setEmail] = useState('');
@@ -42,7 +46,6 @@ function App() {
       setError(null);
     } catch (e) {
       const message = (e as Error).message;
-      // Jeton expiré : retour à l'écran de connexion
       if (message.includes('reconnecter')) {
         setUtilisateur(null);
       } else {
@@ -54,11 +57,11 @@ function App() {
   }
 
   useEffect(() => {
-    if (utilisateur) {
+    if (utilisateur && vue === 'patients') {
       loadPatients();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [utilisateur]);
+  }, [utilisateur, vue]);
 
   // Connexion
   async function handleLogin(e: React.FormEvent) {
@@ -68,6 +71,7 @@ function App() {
     try {
       const u = await login(email, motDePasse);
       setMotDePasse('');
+      setVue('patients');
       setUtilisateur(u);
     } catch (err) {
       setLoginError((err as Error).message);
@@ -119,7 +123,20 @@ function App() {
   const sexLabel = (s: string) =>
     s === 'M' ? 'Masculin' : s === 'F' ? 'Féminin' : s === 'other' ? 'Autre' : '—';
 
+  const ongletStyle = (actif: boolean): React.CSSProperties => ({
+    padding: '6px 16px',
+    marginRight: 8,
+    cursor: 'pointer',
+    border: '1px solid #ccc',
+    borderRadius: 6,
+    background: actif ? '#0f766e' : '#fff',
+    color: actif ? '#fff' : '#333',
+    fontWeight: actif ? 600 : 400,
+  });
+
+  // --------------------------------------------------------------------------
   // Écran de connexion
+  // --------------------------------------------------------------------------
   if (!utilisateur) {
     return (
       <div className="app">
@@ -156,7 +173,7 @@ function App() {
               </div>
               {loginError && <p className="error">{loginError}</p>}
               <button type="submit" disabled={loggingIn} className="btn-primary">
-                {loggingIn ? 'Connexion...' : 'Se connecter'}
+                {loggingIn ? 'Connexion…' : 'Se connecter'}
               </button>
             </form>
           </section>
@@ -165,7 +182,9 @@ function App() {
     );
   }
 
+  // --------------------------------------------------------------------------
   // Application (utilisateur connecté)
+  // --------------------------------------------------------------------------
   return (
     <div className="app">
       <header className="header">
@@ -173,7 +192,9 @@ function App() {
           <span className="brand-mark">+</span>
           <h1>Kliniko</h1>
         </div>
-        <p className="subtitle">Gestion des patients</p>
+        <p className="subtitle">
+          {vue === 'patients' ? 'Gestion des patients' : 'Agenda des rendez-vous'}
+        </p>
         <p className="muted" style={{ marginTop: 4 }}>
           Connecté : {utilisateur.prenom} {utilisateur.nom} (
           {utilisateur.roles.join(', ')}){' '}
@@ -190,105 +211,133 @@ function App() {
             Se déconnecter
           </button>
         </p>
+        <div style={{ marginTop: 12 }}>
+          <button
+            type="button"
+            style={ongletStyle(vue === 'patients')}
+            onClick={() => setVue('patients')}
+          >
+            Patients
+          </button>
+          {aPermission('rdv.lire') && (
+            <button
+              type="button"
+              style={ongletStyle(vue === 'agenda')}
+              onClick={() => setVue('agenda')}
+            >
+              Agenda
+            </button>
+          )}
+        </div>
       </header>
       <main className="content">
-        {aPermission('patient.creer') && (
-          <section className="card form-card">
-            <h2>Ajouter un patient</h2>
-            <form onSubmit={handleSubmit} className="form">
-              <div className="field">
-                <label>N° dossier</label>
-                <input
-                  value={recordNumber}
-                  onChange={(e) => setRecordNumber(e.target.value)}
-                  placeholder="P-0005"
-                  required
-                />
-              </div>
-              <div className="row">
-                <div className="field">
-                  <label>Prénom</label>
-                  <input
-                    value={firstName}
-                    onChange={(e) => setFirstName(e.target.value)}
-                    placeholder="Aïcha"
-                    required
-                  />
-                </div>
-                <div className="field">
-                  <label>Nom</label>
-                  <input
-                    value={lastName}
-                    onChange={(e) => setLastName(e.target.value)}
-                    placeholder="Etoa"
-                    required
-                  />
-                </div>
-              </div>
-              <div className="row">
-                <div className="field">
-                  <label>Sexe</label>
-                  <select
-                    value={sex}
-                    onChange={(e) => setSex(e.target.value as typeof sex)}
+        {vue === 'agenda' ? (
+          <Agenda onSessionExpiree={() => setUtilisateur(null)} />
+        ) : (
+          <>
+            {aPermission('patient.creer') && (
+              <section className="card form-card">
+                <h2>Ajouter un patient</h2>
+                <form onSubmit={handleSubmit} className="form">
+                  <div className="field">
+                    <label>N° dossier</label>
+                    <input
+                      value={recordNumber}
+                      onChange={(e) => setRecordNumber(e.target.value)}
+                      placeholder="P-0005"
+                      required
+                    />
+                  </div>
+                  <div className="row">
+                    <div className="field">
+                      <label>Prénom</label>
+                      <input
+                        value={firstName}
+                        onChange={(e) => setFirstName(e.target.value)}
+                        placeholder="Aïcha"
+                        required
+                      />
+                    </div>
+                    <div className="field">
+                      <label>Nom</label>
+                      <input
+                        value={lastName}
+                        onChange={(e) => setLastName(e.target.value)}
+                        placeholder="Etoa"
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div className="row">
+                    <div className="field">
+                      <label>Sexe</label>
+                      <select
+                        value={sex}
+                        onChange={(e) => setSex(e.target.value as typeof sex)}
+                      >
+                        <option value="unknown">Non précisé</option>
+                        <option value="F">Féminin</option>
+                        <option value="M">Masculin</option>
+                        <option value="other">Autre</option>
+                      </select>
+                    </div>
+                    <div className="field">
+                      <label>Téléphone</label>
+                      <input
+                        value={phone}
+                        onChange={(e) => setPhone(e.target.value)}
+                        placeholder="+237 6 00 00 00 00"
+                      />
+                    </div>
+                  </div>
+                  {formError && <p className="error">{formError}</p>}
+                  <button
+                    type="submit"
+                    disabled={submitting}
+                    className="btn-primary"
                   >
-                    <option value="unknown">Non précisé</option>
-                    <option value="F">Féminin</option>
-                    <option value="M">Masculin</option>
-                    <option value="other">Autre</option>
-                  </select>
-                </div>
-                <div className="field">
-                  <label>Téléphone</label>
-                  <input
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    placeholder="+237 6 00 00 00 00"
-                  />
-                </div>
+                    {submitting ? 'Enregistrement…' : 'Enregistrer le patient'}
+                  </button>
+                </form>
+              </section>
+            )}
+            <section className="card list-card">
+              <div className="list-header">
+                <h2>Patients</h2>
+                <span className="count">{patients.length}</span>
               </div>
-              {formError && <p className="error">{formError}</p>}
-              <button type="submit" disabled={submitting} className="btn-primary">
-                {submitting ? 'Enregistrement...' : 'Enregistrer le patient'}
-              </button>
-            </form>
-          </section>
+              {loading && <p className="muted">Chargement…</p>}
+              {error && <p className="error">{error}</p>}
+              {!loading && !error && patients.length === 0 && (
+                <p className="muted">Aucun patient pour le moment.</p>
+              )}
+              {!loading && !error && patients.length > 0 && (
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>N° dossier</th>
+                      <th>Nom</th>
+                      <th>Sexe</th>
+                      <th>Téléphone</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {patients.map((p) => (
+                      <tr key={p.id}>
+                        <td className="mono">{p.recordNumber}</td>
+                        <td>
+                          {p.lastName} {p.firstName}
+                        </td>
+                        <td>{sexLabel(p.sex)}</td>
+                        <td>{p.phone || '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </section>
+          </>
         )}
-        <section className="card list-card">
-          <div className="list-header">
-            <h2>Patients</h2>
-            <span className="count">{patients.length}</span>
-          </div>
-          {loading && <p className="muted">Chargement...</p>}
-          {error && <p className="error">{error}</p>}
-          {!loading && !error && patients.length === 0 && (
-            <p className="muted">Aucun patient pour le moment.</p>
-          )}
-          {!loading && !error && patients.length > 0 && (
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>N° dossier</th>
-                  <th>Nom</th>
-                  <th>Sexe</th>
-                  <th>Téléphone</th>
-                </tr>
-              </thead>
-              <tbody>
-                {patients.map((p) => (
-                  <tr key={p.id}>
-                    <td className="mono">{p.recordNumber}</td>
-                    <td>
-                      {p.lastName} {p.firstName}
-                    </td>
-                    <td>{sexLabel(p.sex)}</td>
-                    <td>{p.phone || '-'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </section>
       </main>
     </div>
   );
