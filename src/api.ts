@@ -417,3 +417,111 @@ export async function suggererCompteRendu(
   return res.json();
 }
 
+
+// ---------------------------------------------------------------------------
+// Utilisateurs et mots de passe
+// ---------------------------------------------------------------------------
+
+export type Role = { id: string; code: string; libelle: string };
+
+export type UtilisateurGere = {
+  id: string;
+  email: string;
+  nom: string;
+  prenom: string | null;
+  telephone: string | null;
+  actif: boolean;
+  derniereConnexion: string | null;
+  roles: Role[];
+};
+
+// Catalogue des roles de la clinique
+export async function getRoles(): Promise<Role[]> {
+  const res = await appelApi('/utilisateurs/roles');
+  if (!res.ok) throw new Error('Erreur lors du chargement des roles');
+  return res.json();
+}
+
+export async function getUtilisateurs(): Promise<UtilisateurGere[]> {
+  const res = await appelApi('/utilisateurs');
+  if (!res.ok) throw new Error('Erreur lors du chargement des utilisateurs');
+  return res.json();
+}
+
+export async function createUtilisateur(data: {
+  email: string;
+  motDePasse: string;
+  nom: string;
+  prenom?: string;
+  telephone?: string;
+  roleIds: string[];
+}): Promise<UtilisateurGere> {
+  const res = await appelApi('/utilisateurs', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    throw new Error(
+      await messageErreur(res, 'Erreur lors de la creation du compte'),
+    );
+  }
+  return res.json();
+}
+
+export async function updateUtilisateur(
+  id: string,
+  data: {
+    actif?: boolean;
+    roleIds?: string[];
+    nom?: string;
+    prenom?: string;
+    telephone?: string;
+  },
+): Promise<UtilisateurGere> {
+  const res = await appelApi(`/utilisateurs/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    throw new Error(await messageErreur(res, 'Erreur lors de la modification'));
+  }
+  return res.json();
+}
+
+// Reinitialisation par un administrateur
+export async function reinitialiserMotDePasse(
+  id: string,
+  motDePasse: string,
+): Promise<{ message: string }> {
+  const res = await appelApi(`/utilisateurs/${id}/mot-de-passe`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ motDePasse }),
+  });
+  if (!res.ok) {
+    throw new Error(
+      await messageErreur(res, 'Erreur lors de la reinitialisation'),
+    );
+  }
+  return res.json();
+}
+
+// Changement par l utilisateur connecte
+export async function changerMonMotDePasse(
+  ancienMotDePasse: string,
+  nouveauMotDePasse: string,
+): Promise<{ message: string }> {
+  const res = await appelApi('/utilisateurs/moi/mot-de-passe', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ancienMotDePasse, nouveauMotDePasse }),
+  });
+  if (!res.ok) {
+    throw new Error(
+      await messageErreur(res, 'Erreur lors du changement de mot de passe'),
+    );
+  }
+  return res.json();
+}

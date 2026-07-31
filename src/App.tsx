@@ -11,16 +11,22 @@ import {
 import Agenda from './Agenda';
 import Factures from './Factures';
 import Consultations from './Consultations';
+import Utilisateurs from './Utilisateurs';
+import MonCompte from './MonCompte';
 import './App.css';
 
+type Vue =
+  | 'patients'
+  | 'agenda'
+  | 'factures'
+  | 'consultations'
+  | 'utilisateurs'
+  | 'compte';
+
 function App() {
-  // Utilisateur connecté (null = écran de connexion)
   const [utilisateur, setUtilisateur] = useState<Utilisateur | null>(null);
+  const [vue, setVue] = useState<Vue>('patients');
 
-  // Vue courante
-  const [vue, setVue] = useState<'patients' | 'agenda' | 'factures' | 'consultations'>('patients');
-
-  // Champs de l'écran de connexion
   const [email, setEmail] = useState('');
   const [motDePasse, setMotDePasse] = useState('');
   const [loginError, setLoginError] = useState<string | null>(null);
@@ -30,7 +36,6 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Champs du formulaire patient
   const [recordNumber, setRecordNumber] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -39,7 +44,6 @@ function App() {
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
-  // Charger les patients (une fois connecté)
   async function loadPatients() {
     try {
       setLoading(true);
@@ -65,7 +69,6 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [utilisateur, vue]);
 
-  // Connexion
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
     setLoggingIn(true);
@@ -82,7 +85,6 @@ function App() {
     }
   }
 
-  // Déconnexion
   function handleLogout() {
     logout();
     setUtilisateur(null);
@@ -91,7 +93,6 @@ function App() {
     setMotDePasse('');
   }
 
-  // Soumettre le formulaire patient
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSubmitting(true);
@@ -128,6 +129,7 @@ function App() {
   const ongletStyle = (actif: boolean): React.CSSProperties => ({
     padding: '6px 16px',
     marginRight: 8,
+    marginBottom: 6,
     cursor: 'pointer',
     border: '1px solid #ccc',
     borderRadius: 6,
@@ -136,9 +138,15 @@ function App() {
     fontWeight: actif ? 600 : 400,
   });
 
-  // --------------------------------------------------------------------------
-  // Écran de connexion
-  // --------------------------------------------------------------------------
+  const titre: Record<Vue, string> = {
+    patients: 'Gestion des patients',
+    agenda: 'Agenda des rendez-vous',
+    consultations: 'Consultations et dossier médical',
+    factures: 'Facturation et caisse',
+    utilisateurs: 'Utilisateurs et rôles',
+    compte: 'Mon compte',
+  };
+
   if (!utilisateur) {
     return (
       <div className="app">
@@ -184,9 +192,6 @@ function App() {
     );
   }
 
-  // --------------------------------------------------------------------------
-  // Application (utilisateur connecté)
-  // --------------------------------------------------------------------------
   return (
     <div className="app">
       <header className="header">
@@ -194,15 +199,7 @@ function App() {
           <span className="brand-mark">+</span>
           <h1>Kliniko</h1>
         </div>
-        <p className="subtitle">
-          {vue === 'patients'
-            ? 'Gestion des patients'
-            : vue === 'agenda'
-              ? 'Agenda des rendez-vous'
-              : vue === 'factures'
-                ? 'Facturation et caisse'
-                : 'Consultations et dossier médical'}
-        </p>
+        <p className="subtitle">{titre[vue]}</p>
         <p className="muted" style={{ marginTop: 4 }}>
           Connecté : {utilisateur.prenom} {utilisateur.nom} (
           {utilisateur.roles.join(', ')}){' '}
@@ -254,6 +251,22 @@ function App() {
               Factures
             </button>
           )}
+          {aPermission('utilisateur.gerer') && (
+            <button
+              type="button"
+              style={ongletStyle(vue === 'utilisateurs')}
+              onClick={() => setVue('utilisateurs')}
+            >
+              Utilisateurs
+            </button>
+          )}
+          <button
+            type="button"
+            style={ongletStyle(vue === 'compte')}
+            onClick={() => setVue('compte')}
+          >
+            Mon compte
+          </button>
         </div>
       </header>
       <main className="content">
@@ -263,6 +276,10 @@ function App() {
           <Factures onSessionExpiree={() => setUtilisateur(null)} />
         ) : vue === 'consultations' ? (
           <Consultations onSessionExpiree={() => setUtilisateur(null)} />
+        ) : vue === 'utilisateurs' ? (
+          <Utilisateurs onSessionExpiree={() => setUtilisateur(null)} />
+        ) : vue === 'compte' ? (
+          <MonCompte onSessionExpiree={() => setUtilisateur(null)} />
         ) : (
           <>
             {aPermission('patient.creer') && (
