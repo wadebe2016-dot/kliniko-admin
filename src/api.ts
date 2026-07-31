@@ -525,3 +525,47 @@ export async function changerMonMotDePasse(
   }
   return res.json();
 }
+
+// ---------------------------------------------------------------------------
+// Paiement Mobile Money (Campay)
+// ---------------------------------------------------------------------------
+
+export type DemandePaiementMobile = {
+  paiementId: string;
+  reference: string;
+  operateur: string | null;
+  ussdCode: string | null;
+  message: string;
+};
+
+// Envoie la demande de paiement sur le telephone du client
+export async function demanderPaiementMobile(data: {
+  factureId: string;
+  montant: number;
+  telephone: string;
+}): Promise<DemandePaiementMobile> {
+  const res = await appelApi('/paiements/mobile', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    throw new Error(
+      await messageErreur(res, 'Erreur lors de la demande de paiement'),
+    );
+  }
+  return res.json();
+}
+
+// Demande a Campay le statut reel de la transaction
+export async function verifierPaiementMobile(
+  reference: string,
+): Promise<{ statutPaiement: string; facture: Facture }> {
+  const res = await appelApi(`/paiements/${reference}/verifier`, {
+    method: 'POST',
+  });
+  if (!res.ok) {
+    throw new Error(await messageErreur(res, 'Erreur lors de la verification'));
+  }
+  return res.json();
+}

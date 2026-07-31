@@ -2,12 +2,15 @@
 import {
   aPermission,
   createFacture,
+  demanderPaiementMobile,
   encaisserFacture,
   getActes,
   getFacture,
   getFactures,
   getPatients,
+  verifierPaiementMobile,
   type Acte,
+  type DemandePaiementMobile,
   type Facture,
   type Patient,
   type StatutFacture,
@@ -29,6 +32,22 @@ const STATUT_FOND: Record<StatutFacture, string> = {
 
 const fmt = (n: string | number) => Number(n).toLocaleString('fr-FR');
 
+// Les paiements portent des champs Campay que le type de base ne declare pas
+type PaiementAffiche = {
+  id: string;
+  montant: string | number;
+  moyen: 'especes' | 'mobile_money';
+  datePaiement: string;
+  campayStatut?: string | null;
+};
+
+const LIBELLE_STATUT_CAMPAY: Record<string, string> = {
+  PENDING: 'en attente',
+  INITIE: 'en attente',
+  SUCCESSFUL: 'confirmé',
+  FAILED: 'échoué',
+};
+
 type Props = {
   onSessionExpiree: () => void;
 };
@@ -40,18 +59,22 @@ function Factures({ onSessionExpiree }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Formulaire nouvelle facture : quantite par acte (0 = non facture)
   const [patientId, setPatientId] = useState('');
   const [quantites, setQuantites] = useState<Record<string, number>>({});
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
-  // Facture selectionnee (detail + encaissement)
   const [detail, setDetail] = useState<Facture | null>(null);
   const [montant, setMontant] = useState('');
   const [moyen, setMoyen] = useState<'especes' | 'mobile_money'>('especes');
+  const [telephone, setTelephone] = useState('');
   const [encaisseError, setEncaisseError] = useState<string | null>(null);
   const [encaissement, setEncaissement] = useState(false);
+
+  // Paiement Mobile Money en cours de validation par le client
+  const [attente, setAttente] = useState<DemandePaiementMobile | null>(null);
+  const [messagePaiement, setMessagePaiement] = useState<string | null>(null);
+  const [verificationEnCours, setVerificationEnCours] = useState(false);
 
   function gererErreur(e: Error, poserErreur: (m: string) => void) {
     if (e.message.includes('reconnecter')) {
@@ -85,6 +108,46 @@ function Factures({ onSessionExpiree }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Tant qu un paiement mobile est en attente, on interroge Campay
+  // toutes les 5 secondes (2 minutes au maximum).
+  useEffect(() => {
+    if (!attente) return;
+    let annule = false;
+    let essais = 0;
+    const minuteur = setInterval(async () => {
+      essais += 1;
+      if (essais > 24) {
+        clearInterval(minuteur);
+        setMessagePaiement(
+          "Toujours sans réponse. Utilise « Vérifier maintenant » quand le client aura validé.",
+        );
+        return;
+      }
+      try {
+        const v = await verifierPaiementMobile(attente.reference);
+        if (annule) return;
+        if (v.statutPaiement !== 'PENDING' && v.statutPaiement !== 'INITIE') {
+          clearInterval(minuteur);
+          setAttente(null);
+          setDetail(v.facture);
+          setMessagePaiement(
+            v.statutPaiement === 'SUCCESSFUL'
+              ? 'Paiement confirmé et encaissé.'
+              : `Paiement ${LIBELLE_STATUT_CAMPAY[v.statutPaiement] ?? v.statutPaiement}.`,
+          );
+          await charger();
+        }
+      } catch {
+        // reseau ou service momentanement indisponible : on retentera
+      }
+    }, 5000);
+    return () => {
+      annule = true;
+      clearInterval(minuteur);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [attente]);
+
   const totalEstime = actes.reduce(
     (somme, a) => somme + (quantites[a.id] ?? 0) * (a.tarif ?? 0),
     0,
@@ -96,7 +159,7 @@ function Factures({ onSessionExpiree }: Props) {
       .filter((a) => (quantites[a.id] ?? 0) > 0)
       .map((a) => ({ acteId: a.id, quantite: quantites[a.id] }));
     if (lignes.length === 0) {
-      setFormError('Choisis au moins un acte (quantite superieure a zero)');
+      setFormError('Choisis au moins un acte (quantité supérieure à zéro)');
       return;
     }
     setSubmitting(true);
@@ -121,6 +184,8 @@ function Factures({ onSessionExpiree }: Props) {
       const reste = Number(f.montantTotal) - Number(f.montantPaye);
       setMontant(reste > 0 ? String(reste) : '');
       setEncaisseError(null);
+      setAttente(null);
+      setMessagePaiement(null);
     } catch (e) {
       gererErreur(e as Error, setError);
     }
@@ -131,15 +196,28 @@ function Factures({ onSessionExpiree }: Props) {
     if (!detail) return;
     setEncaissement(true);
     setEncaisseError(null);
+    setMessagePaiement(null);
     try {
-      const f = await encaisserFacture(detail.id, {
-        montant: Number(montant),
-        moyen,
-      });
-      setDetail(f);
-      const reste = Number(f.montantTotal) - Number(f.montantPaye);
-      setMontant(reste > 0 ? String(reste) : '');
-      await charger();
+      if (moyen === 'mobile_money') {
+        const demande = await demanderPaiementMobile({
+          factureId: detail.id,
+          montant: Number(montant),
+          telephone,
+        });
+        setAttente(demande);
+        setMessagePaiement(
+          'Demande envoyée. Le client doit valider sur son téléphone.',
+        );
+      } else {
+        const f = await encaisserFacture(detail.id, {
+          montant: Number(montant),
+          moyen: 'especes',
+        });
+        setDetail(f);
+        const reste = Number(f.montantTotal) - Number(f.montantPaye);
+        setMontant(reste > 0 ? String(reste) : '');
+        await charger();
+      }
     } catch (err) {
       gererErreur(err as Error, setEncaisseError);
     } finally {
@@ -147,9 +225,41 @@ function Factures({ onSessionExpiree }: Props) {
     }
   }
 
+  async function verifierMaintenant() {
+    if (!attente) return;
+    setVerificationEnCours(true);
+    setEncaisseError(null);
+    try {
+      const v = await verifierPaiementMobile(attente.reference);
+      setDetail(v.facture);
+      if (v.statutPaiement === 'PENDING' || v.statutPaiement === 'INITIE') {
+        setMessagePaiement('Toujours en attente de validation par le client.');
+      } else {
+        setAttente(null);
+        setMessagePaiement(
+          v.statutPaiement === 'SUCCESSFUL'
+            ? 'Paiement confirmé et encaissé.'
+            : `Paiement ${LIBELLE_STATUT_CAMPAY[v.statutPaiement] ?? v.statutPaiement}.`,
+        );
+      }
+      await charger();
+    } catch (err) {
+      gererErreur(err as Error, setEncaisseError);
+    } finally {
+      setVerificationEnCours(false);
+    }
+  }
+
+  function abandonner() {
+    setAttente(null);
+    setMessagePaiement(null);
+  }
+
   const resteDetail = detail
     ? Number(detail.montantTotal) - Number(detail.montantPaye)
     : 0;
+
+  const paiements = (detail?.paiements ?? []) as unknown as PaiementAffiche[];
 
   return (
     <>
@@ -284,7 +394,11 @@ function Factures({ onSessionExpiree }: Props) {
             </h2>
             <button
               type="button"
-              style={{ padding: '2px 10px', cursor: 'pointer' }}
+              style={{
+                marginLeft: 'auto',
+                padding: '2px 10px',
+                cursor: 'pointer',
+              }}
               onClick={() => setDetail(null)}
             >
               Fermer
@@ -315,18 +429,65 @@ function Factures({ onSessionExpiree }: Props) {
             {' — '}Payé : <strong>{fmt(detail.montantPaye)}</strong>
             {' — '}Reste : <strong>{fmt(resteDetail)}</strong>
           </p>
-          {(detail.paiements ?? []).length > 0 && (
+          {paiements.length > 0 && (
             <p className="muted">
               Paiements :{' '}
-              {(detail.paiements ?? [])
-                .map(
-                  (p) =>
-                    `${fmt(p.montant)} (${p.moyen === 'especes' ? 'espèces' : 'mobile money'})`,
-                )
-                .join(' + ')}
+              {paiements
+                .map((p) => {
+                  const moyenLisible =
+                    p.moyen === 'especes' ? 'espèces' : 'mobile money';
+                  const etat = p.campayStatut
+                    ? `, ${LIBELLE_STATUT_CAMPAY[p.campayStatut] ?? p.campayStatut}`
+                    : '';
+                  return `${fmt(p.montant)} (${moyenLisible}${etat})`;
+                })
+                .join(' · ')}
             </p>
           )}
+
+          {attente && (
+            <div
+              style={{
+                background: '#f6e7c9',
+                borderRadius: 8,
+                padding: '0.8rem 1rem',
+                marginTop: 8,
+              }}
+            >
+              <p style={{ margin: 0 }}>
+                <strong>En attente de validation</strong> — le client doit
+                confirmer le paiement sur son téléphone
+                {attente.ussdCode ? ` (code ${attente.ussdCode})` : ''}
+                {attente.operateur ? `, opérateur ${attente.operateur}` : ''}.
+              </p>
+              <div style={{ marginTop: 8 }}>
+                <button
+                  type="button"
+                  onClick={verifierMaintenant}
+                  disabled={verificationEnCours}
+                  style={{
+                    padding: '4px 12px',
+                    marginRight: 8,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {verificationEnCours ? 'Vérification…' : 'Vérifier maintenant'}
+                </button>
+                <button
+                  type="button"
+                  onClick={abandonner}
+                  style={{ padding: '4px 12px', cursor: 'pointer' }}
+                >
+                  Masquer
+                </button>
+              </div>
+            </div>
+          )}
+
+          {messagePaiement && <p className="muted">{messagePaiement}</p>}
+
           {aPermission('facture.encaisser') &&
+            !attente &&
             detail.statut !== 'reglee' &&
             detail.statut !== 'annulee' && (
               <form
@@ -334,6 +495,7 @@ function Factures({ onSessionExpiree }: Props) {
                 style={{
                   display: 'flex',
                   alignItems: 'center',
+                  flexWrap: 'wrap',
                   gap: 8,
                   marginTop: 8,
                 }}
@@ -356,13 +518,27 @@ function Factures({ onSessionExpiree }: Props) {
                   <option value="especes">Espèces</option>
                   <option value="mobile_money">Mobile Money</option>
                 </select>
+                {moyen === 'mobile_money' && (
+                  <input
+                    type="tel"
+                    value={telephone}
+                    onChange={(e) => setTelephone(e.target.value)}
+                    placeholder="6XX XXX XXX"
+                    required
+                    style={{ width: 150 }}
+                  />
+                )}
                 <button
                   type="submit"
                   disabled={encaissement}
                   className="btn-primary"
-                  style={{ padding: '6px 16px' }}
+                  style={{ padding: '6px 16px', margin: 0 }}
                 >
-                  {encaissement ? 'Encaissement…' : 'Encaisser'}
+                  {encaissement
+                    ? 'Envoi…'
+                    : moyen === 'mobile_money'
+                      ? 'Demander le paiement'
+                      : 'Encaisser'}
                 </button>
               </form>
             )}
