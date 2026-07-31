@@ -31,11 +31,11 @@ function echapper(t: string | null | undefined): string {
 }
 
 function jour(iso: string | null): string {
-  return iso ? new Date(iso).toLocaleDateString('fr-FR') : '—';
+  return iso ? new Date(iso).toLocaleDateString('fr-FR') : 'â€”';
 }
 
 function libelleStatut(s: Ordonnance['statut']): string {
-  return s === 'brouillon' ? 'Brouillon' : s === 'validee' ? 'Signée' : 'Annulée';
+  return s === 'brouillon' ? 'Brouillon' : s === 'validee' ? 'SignÃ©e' : 'AnnulÃ©e';
 }
 
 // L'impression passe par un cadre invisible plutot que par une fenetre :
@@ -49,13 +49,13 @@ function imprimer(o: Ordonnance) {
     : null;
   const praticien = o.praticien
     ? `${o.praticien.prenom ?? ''} ${o.praticien.nom}`.trim()
-    : '—';
+    : 'â€”';
 
   const bandeau =
     o.statut === 'brouillon'
-      ? '<p class="bandeau">BROUILLON — NON SIGNÉE</p>'
+      ? '<p class="bandeau">BROUILLON â€” NON SIGNÃ‰E</p>'
       : o.statut === 'annulee'
-        ? '<p class="bandeau">ORDONNANCE ANNULÉE</p>'
+        ? '<p class="bandeau">ORDONNANCE ANNULÃ‰E</p>'
         : '';
 
   const lignes = o.lignes
@@ -65,12 +65,12 @@ function imprimer(o: Ordonnance) {
         <div class="med">${echapper(l.libelle)}</div>
         <div class="pos">${echapper(l.posologie)}</div>
         <div class="det">${[
-          l.duree ? `Durée : ${echapper(l.duree)}` : '',
-          l.quantite ? `Quantité : ${echapper(l.quantite)}` : '',
+          l.duree ? `DurÃ©e : ${echapper(l.duree)}` : '',
+          l.quantite ? `QuantitÃ© : ${echapper(l.quantite)}` : '',
           l.voie ? `Voie : ${echapper(l.voie)}` : '',
         ]
           .filter(Boolean)
-          .join(' &nbsp;·&nbsp; ')}</div>
+          .join(' &nbsp;Â·&nbsp; ')}</div>
         ${l.instructions ? `<div class="det">${echapper(l.instructions)}</div>` : ''}
       </li>`,
     )
@@ -101,18 +101,18 @@ function imprimer(o: Ordonnance) {
 </style></head><body>
 <header>
   <h1>${echapper(o.hopital.nom)}</h1>
-  <p>${[echapper(o.hopital.ville), echapper(o.hopital.telephone)].filter(Boolean).join(' — ')}</p>
+  <p>${[echapper(o.hopital.ville), echapper(o.hopital.telephone)].filter(Boolean).join(' â€” ')}</p>
 </header>
 ${bandeau}
-<h2>ORDONNANCE MÉDICALE</h2>
+<h2>ORDONNANCE MÃ‰DICALE</h2>
 <div class="bloc">
   <div>
     <strong>${echapper(patient)}</strong><br>
-    Dossier ${echapper(o.patient.numeroDossier)}${age !== null ? ` — ${age} ans` : ''}
-    ${o.patient.sexe ? ` — ${o.patient.sexe === 'M' ? 'Masculin' : 'Féminin'}` : ''}
+    Dossier ${echapper(o.patient.numeroDossier)}${age !== null ? ` â€” ${age} ans` : ''}
+    ${o.patient.sexe ? ` â€” ${o.patient.sexe === 'M' ? 'Masculin' : 'FÃ©minin'}` : ''}
   </div>
   <div style="text-align:right">
-    N° ${echapper(o.numero)}<br>
+    NÂ° ${echapper(o.numero)}<br>
     ${jour(o.dateOrdonnance)}
   </div>
 </div>
@@ -124,7 +124,7 @@ ${o.notes ? `<div class="notes">${echapper(o.notes)}</div>` : ''}
     <div class="trait">Signature et cachet</div>
   </div>
 </footer>
-<div class="pied">Ordonnance ${echapper(o.numero)} — ${echapper(o.hopital.nom)}</div>
+<div class="pied">Ordonnance ${echapper(o.numero)} â€” ${echapper(o.hopital.nom)}</div>
 </body></html>`;
 
   const cadre = document.createElement('iframe');
@@ -208,7 +208,7 @@ export default function Ordonnances({
 
   function ajouterLigne() {
     if (!saisie.libelle.trim() || !saisie.posologie.trim()) {
-      setErreur('Le médicament et la posologie sont obligatoires');
+      setErreur('Le mÃ©dicament et la posologie sont obligatoires');
       return;
     }
     setErreur(null);
@@ -233,7 +233,7 @@ export default function Ordonnances({
       return;
     }
     if (lignes.length === 0) {
-      setErreur('Ajoutez au moins un médicament');
+      setErreur('Ajoutez au moins un mÃ©dicament');
       return;
     }
     setEnCours(true);
@@ -297,7 +297,7 @@ export default function Ordonnances({
                 value={patientId}
                 onChange={(e) => setPatientId(e.target.value)}
               >
-                <option value="">Choisir un patient…</option>
+                <option value="">Choisir un patientâ€¦</option>
                 {patients.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.lastName} {p.firstName} ({p.recordNumber})
@@ -307,7 +307,7 @@ export default function Ordonnances({
             </div>
 
             <div className="field">
-              <label>Médicament</label>
+              <label>MÃ©dicament</label>
               <select
                 value={saisie.medicamentId}
                 onChange={(e) => choisirMedicament(e.target.value)}
@@ -322,11 +322,11 @@ export default function Ordonnances({
             </div>
 
             <div className="field">
-              <label>Libellé prescrit</label>
+              <label>LibellÃ© prescrit</label>
               <input
                 value={saisie.libelle}
                 onChange={(e) => setSaisie({ ...saisie, libelle: e.target.value })}
-                placeholder="Paracétamol 500 mg comprimé"
+                placeholder="ParacÃ©tamol 500 mg comprimÃ©"
               />
             </div>
 
@@ -335,13 +335,13 @@ export default function Ordonnances({
               <input
                 value={saisie.posologie}
                 onChange={(e) => setSaisie({ ...saisie, posologie: e.target.value })}
-                placeholder="1 comprimé 3 fois par jour"
+                placeholder="1 comprimÃ© 3 fois par jour"
               />
             </div>
 
             <div className="row">
               <div className="field">
-                <label>Durée</label>
+                <label>DurÃ©e</label>
                 <input
                   value={saisie.duree}
                   onChange={(e) => setSaisie({ ...saisie, duree: e.target.value })}
@@ -349,11 +349,11 @@ export default function Ordonnances({
                 />
               </div>
               <div className="field">
-                <label>Quantité</label>
+                <label>QuantitÃ©</label>
                 <input
                   value={saisie.quantite}
                   onChange={(e) => setSaisie({ ...saisie, quantite: e.target.value })}
-                  placeholder="15 comprimés"
+                  placeholder="15 comprimÃ©s"
                 />
               </div>
             </div>
@@ -374,19 +374,19 @@ export default function Ordonnances({
                   onChange={(e) =>
                     setSaisie({ ...saisie, instructions: e.target.value })
                   }
-                  placeholder="À prendre au cours des repas"
+                  placeholder="Ã€ prendre au cours des repas"
                 />
               </div>
             </div>
 
             <button type="button" onClick={ajouterLigne}>
-              Ajouter à l'ordonnance
+              Ajouter Ã  l'ordonnance
             </button>
 
             {lignes.length > 0 && (
               <table className="table" style={{ marginTop: 12 }}>
                 <tbody>
-                  {lignes.map((l) => (
+                  {lignes.map((l, i) => (
                     <tr key={i}>
                       <td>
                         <strong>{l.libelle}</strong>
@@ -394,7 +394,7 @@ export default function Ordonnances({
                         <span className="muted">
                           {[l.posologie, l.duree, l.quantite]
                             .filter(Boolean)
-                            .join(' · ')}
+                            .join(' Â· ')}
                         </span>
                       </td>
                       <td style={{ width: 40 }}>
@@ -404,7 +404,7 @@ export default function Ordonnances({
                             setLignes(lignes.filter((_, j) => j !== i))
                           }
                         >
-                          ×
+                          Ã—
                         </button>
                       </td>
                     </tr>
@@ -419,7 +419,7 @@ export default function Ordonnances({
                 rows={2}
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                placeholder="Revoir le patient dans une semaine si la fièvre persiste."
+                placeholder="Revoir le patient dans une semaine si la fiÃ¨vre persiste."
               />
             </div>
 
@@ -439,7 +439,7 @@ export default function Ordonnances({
                 disabled={enCours}
                 onClick={() => enregistrer(true)}
               >
-                {enCours ? 'Enregistrement…' : 'Signer et enregistrer'}
+                {enCours ? 'Enregistrementâ€¦' : 'Signer et enregistrer'}
               </button>
             </div>
           </div>
@@ -451,7 +451,7 @@ export default function Ordonnances({
           <h2>Ordonnances</h2>
           <span className="count">{ordonnances.length}</span>
         </div>
-        {chargement && <p className="muted">Chargement…</p>}
+        {chargement && <p className="muted">Chargementâ€¦</p>}
         {!chargement && !peutRediger && erreur && <p className="error">{erreur}</p>}
         {!chargement && ordonnances.length === 0 && (
           <p className="muted">Aucune ordonnance pour le moment.</p>
@@ -460,7 +460,7 @@ export default function Ordonnances({
           <table className="table">
             <thead>
               <tr>
-                <th>N°</th>
+                <th>NÂ°</th>
                 <th>Patient</th>
                 <th>Date</th>
                 <th>Statut</th>
@@ -478,7 +478,7 @@ export default function Ordonnances({
                   <td>{libelleStatut(o.statut)}</td>
                   <td>
                     <button type="button" onClick={() => setSelection(o)}>
-                      Détail
+                      DÃ©tail
                     </button>
                   </td>
                 </tr>
@@ -492,7 +492,7 @@ export default function Ordonnances({
         <section className="card">
           <div className="list-header">
             <h2>
-              {selection.numero} — {selection.patient.nom}{' '}
+              {selection.numero} â€” {selection.patient.nom}{' '}
               {selection.patient.prenom}
             </h2>
             <button type="button" onClick={() => setSelection(null)}>
@@ -500,12 +500,12 @@ export default function Ordonnances({
             </button>
           </div>
           <p className="muted">
-            {libelleStatut(selection.statut)} · {jour(selection.dateOrdonnance)}
+            {libelleStatut(selection.statut)} Â· {jour(selection.dateOrdonnance)}
             {selection.praticien
-              ? ` · ${selection.praticien.prenom ?? ''} ${selection.praticien.nom}`
+              ? ` Â· ${selection.praticien.prenom ?? ''} ${selection.praticien.nom}`
               : ''}
             {selection.motifAnnulation
-              ? ` · Motif : ${selection.motifAnnulation}`
+              ? ` Â· Motif : ${selection.motifAnnulation}`
               : ''}
           </p>
           <ol>
@@ -517,13 +517,13 @@ export default function Ordonnances({
                 <br />
                 <span className="muted">
                   {[
-                    l.duree ? `Durée : ${l.duree}` : '',
-                    l.quantite ? `Quantité : ${l.quantite}` : '',
+                    l.duree ? `DurÃ©e : ${l.duree}` : '',
+                    l.quantite ? `QuantitÃ© : ${l.quantite}` : '',
                     l.voie ? `Voie : ${l.voie}` : '',
                     l.instructions,
                   ]
                     .filter(Boolean)
-                    .join(' · ')}
+                    .join(' Â· ')}
                 </span>
               </li>
             ))}
