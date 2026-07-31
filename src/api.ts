@@ -1,4 +1,4 @@
-﻿// Communication avec le backend Kliniko (NestJS sur l'EC2)
+// Communication avec le backend Kliniko (NestJS sur l'EC2)
 const API_URL = '/api';
 
 // ---------------------------------------------------------------------------
@@ -567,5 +567,113 @@ export async function verifierPaiementMobile(
   if (!res.ok) {
     throw new Error(await messageErreur(res, 'Erreur lors de la verification'));
   }
+  return res.json();
+}
+
+// ----------------------------------------------------------------------------
+// Ordonnances et referentiel medicaments
+// ----------------------------------------------------------------------------
+
+export type Medicament = {
+  id: string;
+  code: string | null;
+  denomination: string;
+  forme: string | null;
+  dosage: string | null;
+};
+
+export type LigneOrdonnance = {
+  id?: string;
+  medicamentId?: string | null;
+  libelle: string;
+  posologie: string;
+  duree?: string | null;
+  quantite?: string | null;
+  voie?: string | null;
+  instructions?: string | null;
+  ordre?: number;
+};
+
+export type Ordonnance = {
+  id: string;
+  numero: string;
+  dateOrdonnance: string;
+  statut: 'brouillon' | 'validee' | 'annulee';
+  notes: string | null;
+  valideeLe: string | null;
+  annuleeLe: string | null;
+  motifAnnulation: string | null;
+  consultationId: string | null;
+  hopital: { nom: string; ville: string | null; telephone: string | null };
+  patient: {
+    id: string;
+    numeroDossier: string;
+    nom: string;
+    prenom: string | null;
+    dateNaissance: string | null;
+    sexe: string | null;
+  };
+  praticien: {
+    id: string;
+    nom: string;
+    prenom: string | null;
+    specialite: string | null;
+  } | null;
+  lignes: LigneOrdonnance[];
+};
+
+async function echecOrdonnance(res: Response, defaut: string): Promise<never> {
+  const err = await res.json().catch(() => ({}));
+  const m = err.message;
+  throw new Error(Array.isArray(m) ? m.join(' - ') : m || defaut);
+}
+
+export async function listerMedicaments(): Promise<Medicament[]> {
+  const res = await appelApi('/medicaments');
+  if (!res.ok) await echecOrdonnance(res, 'Erreur lors du chargement des medicaments');
+  return res.json();
+}
+
+export async function listerOrdonnances(
+  patientId?: string,
+): Promise<Ordonnance[]> {
+  const suffixe = patientId ? `?patientId=${encodeURIComponent(patientId)}` : '';
+  const res = await appelApi(`/ordonnances${suffixe}`);
+  if (!res.ok) await echecOrdonnance(res, 'Erreur lors du chargement des ordonnances');
+  return res.json();
+}
+
+export async function creerOrdonnance(data: {
+  patientId: string;
+  consultationId?: string;
+  notes?: string;
+  valider?: boolean;
+  lignes: LigneOrdonnance[];
+}): Promise<Ordonnance> {
+  const res = await appelApi('/ordonnances', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) await echecOrdonnance(res, "Erreur lors de la creation de l'ordonnance");
+  return res.json();
+}
+
+export async function validerOrdonnance(id: string): Promise<Ordonnance> {
+  const res = await appelApi(`/ordonnances/${id}/valider`, { method: 'POST' });
+  if (!res.ok) await echecOrdonnance(res, 'Erreur lors de la validation');
+  return res.json();
+}
+
+export async function annulerOrdonnance(
+  id: string,
+  motif?: string,
+): Promise<Ordonnance> {
+  const res = await appelApi(`/ordonnances/${id}`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ motif }),
+  });
+  if (!res.ok) await echecOrdonnance(res, "Erreur lors de l'annulation");
   return res.json();
 }

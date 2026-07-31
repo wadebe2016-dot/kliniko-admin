@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   getPatients,
   createPatient,
@@ -13,6 +13,7 @@ import Factures from './Factures';
 import Consultations from './Consultations';
 import Utilisateurs from './Utilisateurs';
 import MonCompte from './MonCompte';
+import Ordonnances from './Ordonnances';
 import './App.css';
 
 type Vue =
@@ -21,7 +22,7 @@ type Vue =
   | 'factures'
   | 'consultations'
   | 'utilisateurs'
-  | 'compte';
+  | 'compte' | 'ordonnances';
 
 function App() {
   const [utilisateur, setUtilisateur] = useState<Utilisateur | null>(null);
@@ -124,7 +125,7 @@ function App() {
   }
 
   const sexLabel = (s: string) =>
-    s === 'M' ? 'Masculin' : s === 'F' ? 'Féminin' : s === 'other' ? 'Autre' : '—';
+    s === 'M' ? 'Masculin' : s === 'F' ? 'FÃƒÂ©minin' : s === 'other' ? 'Autre' : 'Ã¢â‚¬â€';
 
   const ongletStyle = (actif: boolean): React.CSSProperties => ({
     padding: '6px 16px',
@@ -139,11 +140,12 @@ function App() {
   });
 
   const titre: Record<Vue, string> = {
+    ordonnances: 'Ordonnances et prescriptions',
     patients: 'Gestion des patients',
     agenda: 'Agenda des rendez-vous',
-    consultations: 'Consultations et dossier médical',
+    consultations: 'Consultations et dossier mÃƒÂ©dical',
     factures: 'Facturation et caisse',
-    utilisateurs: 'Utilisateurs et rôles',
+    utilisateurs: 'Utilisateurs et rÃƒÂ´les',
     compte: 'Mon compte',
   };
 
@@ -183,7 +185,7 @@ function App() {
               </div>
               {loginError && <p className="error">{loginError}</p>}
               <button type="submit" disabled={loggingIn} className="btn-primary">
-                {loggingIn ? 'Connexion…' : 'Se connecter'}
+                {loggingIn ? 'ConnexionÃ¢â‚¬Â¦' : 'Se connecter'}
               </button>
             </form>
           </section>
@@ -201,7 +203,7 @@ function App() {
         </div>
         <p className="subtitle">{titre[vue]}</p>
         <p className="muted" style={{ marginTop: 4 }}>
-          Connecté : {utilisateur.prenom} {utilisateur.nom} (
+          ConnectÃƒÂ© : {utilisateur.prenom} {utilisateur.nom} (
           {utilisateur.roles.join(', ')}){' '}
           <button
             type="button"
@@ -213,7 +215,7 @@ function App() {
               fontSize: '0.85em',
             }}
           >
-            Se déconnecter
+            Se dÃƒÂ©connecter
           </button>
         </p>
         <div style={{ marginTop: 12 }}>
@@ -240,6 +242,15 @@ function App() {
               onClick={() => setVue('consultations')}
             >
               Consultations
+            </button>
+          )}
+          {aPermission('ordonnance.lire') && (
+            <button
+              type="button"
+              style={ongletStyle(vue === 'ordonnances')}
+              onClick={() => setVue('ordonnances')}
+            >
+              Ordonnances
             </button>
           )}
           {aPermission('facture.lire') && (
@@ -272,6 +283,8 @@ function App() {
       <main className="content">
         {vue === 'agenda' ? (
           <Agenda onSessionExpiree={() => setUtilisateur(null)} />
+        ) : vue === 'ordonnances' ? (
+          <Ordonnances onSessionExpiree={() => setUtilisateur(null)} />
         ) : vue === 'factures' ? (
           <Factures onSessionExpiree={() => setUtilisateur(null)} />
         ) : vue === 'consultations' ? (
@@ -287,7 +300,7 @@ function App() {
                 <h2>Ajouter un patient</h2>
                 <form onSubmit={handleSubmit} className="form">
                   <div className="field">
-                    <label>N° dossier</label>
+                    <label>NÃ‚Â° dossier</label>
                     <input
                       value={recordNumber}
                       onChange={(e) => setRecordNumber(e.target.value)}
@@ -297,11 +310,11 @@ function App() {
                   </div>
                   <div className="row">
                     <div className="field">
-                      <label>Prénom</label>
+                      <label>PrÃƒÂ©nom</label>
                       <input
                         value={firstName}
                         onChange={(e) => setFirstName(e.target.value)}
-                        placeholder="Aïcha"
+                        placeholder="AÃƒÂ¯cha"
                         required
                       />
                     </div>
@@ -322,14 +335,14 @@ function App() {
                         value={sex}
                         onChange={(e) => setSex(e.target.value as typeof sex)}
                       >
-                        <option value="unknown">Non précisé</option>
-                        <option value="F">Féminin</option>
+                        <option value="unknown">Non prÃƒÂ©cisÃƒÂ©</option>
+                        <option value="F">FÃƒÂ©minin</option>
                         <option value="M">Masculin</option>
                         <option value="other">Autre</option>
                       </select>
                     </div>
                     <div className="field">
-                      <label>Téléphone</label>
+                      <label>TÃƒÂ©lÃƒÂ©phone</label>
                       <input
                         value={phone}
                         onChange={(e) => setPhone(e.target.value)}
@@ -343,7 +356,7 @@ function App() {
                     disabled={submitting}
                     className="btn-primary"
                   >
-                    {submitting ? 'Enregistrement…' : 'Enregistrer le patient'}
+                    {submitting ? 'EnregistrementÃ¢â‚¬Â¦' : 'Enregistrer le patient'}
                   </button>
                 </form>
               </section>
@@ -353,7 +366,7 @@ function App() {
                 <h2>Patients</h2>
                 <span className="count">{patients.length}</span>
               </div>
-              {loading && <p className="muted">Chargement…</p>}
+              {loading && <p className="muted">ChargementÃ¢â‚¬Â¦</p>}
               {error && <p className="error">{error}</p>}
               {!loading && !error && patients.length === 0 && (
                 <p className="muted">Aucun patient pour le moment.</p>
@@ -362,10 +375,10 @@ function App() {
                 <table className="table">
                   <thead>
                     <tr>
-                      <th>N° dossier</th>
+                      <th>NÃ‚Â° dossier</th>
                       <th>Nom</th>
                       <th>Sexe</th>
-                      <th>Téléphone</th>
+                      <th>TÃƒÂ©lÃƒÂ©phone</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -376,7 +389,7 @@ function App() {
                           {p.lastName} {p.firstName}
                         </td>
                         <td>{sexLabel(p.sex)}</td>
-                        <td>{p.phone || '—'}</td>
+                        <td>{p.phone || 'Ã¢â‚¬â€'}</td>
                       </tr>
                     ))}
                   </tbody>
