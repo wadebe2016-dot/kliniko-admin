@@ -125,7 +125,7 @@ function App() {
   }
 
   const sexLabel = (s: string) =>
-    s === 'M' ? 'Masculin' : s === 'F' ? 'FÃƒÂ©minin' : s === 'other' ? 'Autre' : 'Ã¢â‚¬â€';
+    s === 'M' ? 'Masculin' : s === 'F' ? 'Féminin' : s === 'other' ? 'Autre' : '—';
 
   const ongletStyle = (actif: boolean): React.CSSProperties => ({
     padding: '6px 16px',
@@ -143,9 +143,9 @@ function App() {
     ordonnances: 'Ordonnances et prescriptions',
     patients: 'Gestion des patients',
     agenda: 'Agenda des rendez-vous',
-    consultations: 'Consultations et dossier mÃƒÂ©dical',
+    consultations: 'Consultations et dossier médical',
     factures: 'Facturation et caisse',
-    utilisateurs: 'Utilisateurs et rÃƒÂ´les',
+    utilisateurs: 'Utilisateurs et rôles',
     compte: 'Mon compte',
   };
 
@@ -185,7 +185,7 @@ function App() {
               </div>
               {loginError && <p className="error">{loginError}</p>}
               <button type="submit" disabled={loggingIn} className="btn-primary">
-                {loggingIn ? 'ConnexionÃ¢â‚¬Â¦' : 'Se connecter'}
+                {loggingIn ? 'Connexion…' : 'Se connecter'}
               </button>
             </form>
           </section>
@@ -203,7 +203,7 @@ function App() {
         </div>
         <p className="subtitle">{titre[vue]}</p>
         <p className="muted" style={{ marginTop: 4 }}>
-          ConnectÃƒÂ© : {utilisateur.prenom} {utilisateur.nom} (
+          Connecté : {utilisateur.prenom} {utilisateur.nom} (
           {utilisateur.roles.join(', ')}){' '}
           <button
             type="button"
@@ -215,7 +215,7 @@ function App() {
               fontSize: '0.85em',
             }}
           >
-            Se dÃƒÂ©connecter
+            Se déconnecter
           </button>
         </p>
         <div style={{ marginTop: 12 }}>
@@ -300,7 +300,7 @@ function App() {
                 <h2>Ajouter un patient</h2>
                 <form onSubmit={handleSubmit} className="form">
                   <div className="field">
-                    <label>NÃ‚Â° dossier</label>
+                    <label>N° dossier</label>
                     <input
                       value={recordNumber}
                       onChange={(e) => setRecordNumber(e.target.value)}
@@ -310,11 +310,11 @@ function App() {
                   </div>
                   <div className="row">
                     <div className="field">
-                      <label>PrÃƒÂ©nom</label>
+                      <label>Prénom</label>
                       <input
                         value={firstName}
                         onChange={(e) => setFirstName(e.target.value)}
-                        placeholder="AÃƒÂ¯cha"
+                        placeholder="Aïcha"
                         required
                       />
                     </div>
@@ -335,14 +335,14 @@ function App() {
                         value={sex}
                         onChange={(e) => setSex(e.target.value as typeof sex)}
                       >
-                        <option value="unknown">Non prÃƒÂ©cisÃƒÂ©</option>
-                        <option value="F">FÃƒÂ©minin</option>
+                        <option value="unknown">Non précisé</option>
+                        <option value="F">Féminin</option>
                         <option value="M">Masculin</option>
                         <option value="other">Autre</option>
                       </select>
                     </div>
                     <div className="field">
-                      <label>TÃƒÂ©lÃƒÂ©phone</label>
+                      <label>Téléphone</label>
                       <input
                         value={phone}
                         onChange={(e) => setPhone(e.target.value)}
@@ -356,7 +356,7 @@ function App() {
                     disabled={submitting}
                     className="btn-primary"
                   >
-                    {submitting ? 'EnregistrementÃ¢â‚¬Â¦' : 'Enregistrer le patient'}
+                    {submitting ? 'Enregistrement…' : 'Enregistrer le patient'}
                   </button>
                 </form>
               </section>
@@ -366,7 +366,7 @@ function App() {
                 <h2>Patients</h2>
                 <span className="count">{patients.length}</span>
               </div>
-              {loading && <p className="muted">ChargementÃ¢â‚¬Â¦</p>}
+              {loading && <p className="muted">Chargement…</p>}
               {error && <p className="error">{error}</p>}
               {!loading && !error && patients.length === 0 && (
                 <p className="muted">Aucun patient pour le moment.</p>
@@ -375,10 +375,10 @@ function App() {
                 <table className="table">
                   <thead>
                     <tr>
-                      <th>NÃ‚Â° dossier</th>
+                      <th>N° dossier</th>
                       <th>Nom</th>
                       <th>Sexe</th>
-                      <th>TÃƒÂ©lÃƒÂ©phone</th>
+                      <th>Téléphone</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -389,7 +389,7 @@ function App() {
                           {p.lastName} {p.firstName}
                         </td>
                         <td>{sexLabel(p.sex)}</td>
-                        <td>{p.phone || 'Ã¢â‚¬â€'}</td>
+                        <td>{p.phone || '—'}</td>
                       </tr>
                     ))}
                   </tbody>
