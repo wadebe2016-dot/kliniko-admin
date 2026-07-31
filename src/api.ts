@@ -1,5 +1,5 @@
 ﻿// Communication avec le backend Kliniko (NestJS sur l'EC2)
-const API_URL = 'http://35.180.88.49';
+const API_URL = '/api';
 
 // ---------------------------------------------------------------------------
 // Authentification
@@ -416,3 +416,4 @@ export async function suggererCompteRendu(
   }
   return res.json();
 }
+
