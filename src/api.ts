@@ -677,3 +677,111 @@ export async function annulerOrdonnance(
   if (!res.ok) await echecOrdonnance(res, "Erreur lors de l'annulation");
   return res.json();
 }
+
+// ----------------------------------------------------------------------------
+// Disponibilites : praticiens, horaires, indisponibilites, creneaux
+// ----------------------------------------------------------------------------
+
+export type Praticien = {
+  id: string;
+  nom: string;
+  prenom: string | null;
+  specialite: string | null;
+};
+
+export type Horaire = {
+  id: string;
+  praticienId: string;
+  jourSemaine: number;
+  heureDebut: string;
+  heureFin: string;
+  dureeCreneau: number;
+};
+
+export type Indisponibilite = {
+  id: string;
+  praticienId: string | null;
+  debut: string;
+  fin: string;
+  motif: string | null;
+};
+
+export type JourCreneaux = {
+  date: string;
+  creneaux: { debut: string; fin: string; heure: string }[];
+};
+
+export async function getPraticiens(): Promise<Praticien[]> {
+  const res = await appelApi('/praticiens');
+  if (!res.ok) await echecOrdonnance(res, 'Erreur lors du chargement des praticiens');
+  return res.json();
+}
+
+export async function getHoraires(praticienId: string): Promise<Horaire[]> {
+  const res = await appelApi(`/horaires?praticienId=${encodeURIComponent(praticienId)}`);
+  if (!res.ok) await echecOrdonnance(res, 'Erreur lors du chargement des horaires');
+  return res.json();
+}
+
+export async function creerHoraire(data: {
+  praticienId: string;
+  jourSemaine: number;
+  heureDebut: string;
+  heureFin: string;
+  dureeCreneau?: number;
+}): Promise<Horaire> {
+  const res = await appelApi('/horaires', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) await echecOrdonnance(res, "Erreur lors de la creation de l'horaire");
+  return res.json();
+}
+
+export async function supprimerHoraire(id: string): Promise<void> {
+  const res = await appelApi(`/horaires/${id}`, { method: 'DELETE' });
+  if (!res.ok) await echecOrdonnance(res, 'Erreur lors de la suppression');
+}
+
+export async function getIndisponibilites(
+  praticienId: string,
+): Promise<Indisponibilite[]> {
+  const res = await appelApi(
+    `/indisponibilites?praticienId=${encodeURIComponent(praticienId)}`,
+  );
+  if (!res.ok) await echecOrdonnance(res, 'Erreur lors du chargement des indisponibilites');
+  return res.json();
+}
+
+export async function creerIndisponibilite(data: {
+  praticienId?: string;
+  debut: string;
+  fin: string;
+  motif?: string;
+}): Promise<Indisponibilite> {
+  const res = await appelApi('/indisponibilites', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) await echecOrdonnance(res, "Erreur lors de la creation de l'indisponibilite");
+  return res.json();
+}
+
+export async function supprimerIndisponibilite(id: string): Promise<void> {
+  const res = await appelApi(`/indisponibilites/${id}`, { method: 'DELETE' });
+  if (!res.ok) await echecOrdonnance(res, 'Erreur lors de la suppression');
+}
+
+export async function getDisponibilites(
+  praticienId: string,
+  du: string,
+  au: string,
+): Promise<{ jours: JourCreneaux[] }> {
+  const res = await appelApi(
+    `/disponibilites?praticienId=${encodeURIComponent(praticienId)}&du=${du}&au=${au}`,
+  );
+  if (!res.ok) await echecOrdonnance(res, 'Erreur lors du calcul des creneaux');
+  return res.json();
+}

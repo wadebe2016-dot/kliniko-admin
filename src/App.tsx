@@ -14,6 +14,7 @@ import Consultations from './Consultations';
 import Utilisateurs from './Utilisateurs';
 import MonCompte from './MonCompte';
 import Ordonnances from './Ordonnances';
+import Disponibilites from './Disponibilites';
 import './App.css';
 
 type Vue =
@@ -22,7 +23,7 @@ type Vue =
   | 'factures'
   | 'consultations'
   | 'utilisateurs'
-  | 'compte' | 'ordonnances';
+  | 'compte' | 'ordonnances' | 'disponibilites';
 
 function App() {
   const [utilisateur, setUtilisateur] = useState<Utilisateur | null>(null);
@@ -140,6 +141,7 @@ function App() {
   });
 
   const titre: Record<Vue, string> = {
+    disponibilites: 'Horaires et disponibilités',
     ordonnances: 'Ordonnances et prescriptions',
     patients: 'Gestion des patients',
     agenda: 'Agenda des rendez-vous',
@@ -244,6 +246,15 @@ function App() {
               Consultations
             </button>
           )}
+          {aPermission('rdv.lire') && (
+            <button
+              type="button"
+              style={ongletStyle(vue === 'disponibilites')}
+              onClick={() => setVue('disponibilites')}
+            >
+              Disponibilités
+            </button>
+          )}
           {aPermission('ordonnance.lire') && (
             <button
               type="button"
@@ -283,6 +294,8 @@ function App() {
       <main className="content">
         {vue === 'agenda' ? (
           <Agenda onSessionExpiree={() => setUtilisateur(null)} />
+        ) : vue === 'disponibilites' ? (
+          <Disponibilites onSessionExpiree={() => setUtilisateur(null)} />
         ) : vue === 'ordonnances' ? (
           <Ordonnances onSessionExpiree={() => setUtilisateur(null)} />
         ) : vue === 'factures' ? (
