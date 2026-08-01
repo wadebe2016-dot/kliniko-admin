@@ -195,6 +195,7 @@ export async function getRendezVous(
 
 // Creer un rendez-vous
 export async function createRendezVous(data: {
+  praticienId?: string;
   patientId: string;
   debut: string;
   fin?: string;

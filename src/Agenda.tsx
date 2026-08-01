@@ -1,12 +1,15 @@
-﻿import { useEffect, useState } from 'react';
+﻿import { useCallback, useEffect, useState } from 'react';
 import {
   aPermission,
   annulerRendezVous,
   changerStatutRendezVous,
   createRendezVous,
   getPatients,
+  getPraticiens,
+  getDisponibilites,
   getRendezVous,
   type Patient,
+  type Praticien,
   type RendezVous,
   type StatutRdv,
 } from './api';
@@ -18,7 +21,6 @@ const STATUT_LABEL: Record<StatutRdv, string> = {
   annule: 'Annulé',
   absent: 'Absent',
 };
-
 const STATUT_FOND: Record<StatutRdv, string> = {
   planifie: '#e2ecfb',
   confirme: '#d9f2e5',
@@ -27,6 +29,8 @@ const STATUT_FOND: Record<StatutRdv, string> = {
   absent: '#f6e7c9',
 };
 
+type Creneau = { debut: string; fin: string; heure: string };
+
 type Props = {
   onSessionExpiree: () => void;
 };
@@ -34,34 +38,43 @@ type Props = {
 function Agenda({ onSessionExpiree }: Props) {
   const [rdvs, setRdvs] = useState<RendezVous[]>([]);
   const [patients, setPatients] = useState<Patient[]>([]);
+  const [praticiens, setPraticiens] = useState<Praticien[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Formulaire de creation
   const [patientId, setPatientId] = useState('');
+  const [praticienId, setPraticienId] = useState('');
   const [date, setDate] = useState('');
   const [heure, setHeure] = useState('09:00');
+  const [creneaux, setCreneaux] = useState<Creneau[]>([]);
+  const [creneauChoisi, setCreneauChoisi] = useState<Creneau | null>(null);
+  const [chargeCreneaux, setChargeCreneaux] = useState(false);
   const [motif, setMotif] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
-  function gererErreur(e: Error, poserErreur: (m: string) => void) {
-    if (e.message.includes('reconnecter')) {
-      onSessionExpiree();
-    } else {
-      poserErreur(e.message);
-    }
-  }
+  const gererErreur = useCallback(
+    (e: Error, poserErreur: (m: string) => void) => {
+      if (e.message.includes('reconnecter')) {
+        onSessionExpiree();
+      } else {
+        poserErreur(e.message);
+      }
+    },
+    [onSessionExpiree],
+  );
 
   async function charger() {
     try {
       setLoading(true);
-      const [listeRdv, listePatients] = await Promise.all([
+      const [listeRdv, listePatients, listePraticiens] = await Promise.all([
         getRendezVous(),
         getPatients(),
+        getPraticiens(),
       ]);
       setRdvs(listeRdv);
       setPatients(listePatients);
+      setPraticiens(listePraticiens);
       setError(null);
     } catch (e) {
       gererErreur(e as Error, setError);
@@ -75,21 +88,58 @@ function Agenda({ onSessionExpiree }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Des qu'un praticien ET une date sont choisis, on va chercher ses
+  // creneaux libres du jour. Le choix se fait alors par pastille.
+  useEffect(() => {
+    setCreneauChoisi(null);
+    if (!praticienId || !date) {
+      setCreneaux([]);
+      return;
+    }
+    let annule = false;
+    setChargeCreneaux(true);
+    getDisponibilites(praticienId, date, date)
+      .then((d) => {
+        if (!annule) setCreneaux(d.jours[0]?.creneaux ?? []);
+      })
+      .catch((e) => {
+        if (!annule) gererErreur(e as Error, setFormError);
+      })
+      .finally(() => {
+        if (!annule) setChargeCreneaux(false);
+      });
+    return () => {
+      annule = true;
+    };
+  }, [praticienId, date, gererErreur]);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSubmitting(true);
     setFormError(null);
     try {
-      await createRendezVous({
-        patientId,
-        // Le navigateur convertit l'heure locale en heure universelle
-        debut: new Date(`${date}T${heure}`).toISOString(),
-        motif: motif || undefined,
-      });
+      if (praticienId && creneauChoisi) {
+        await createRendezVous({
+          patientId,
+          praticienId,
+          debut: creneauChoisi.debut,
+          fin: creneauChoisi.fin,
+          motif: motif || undefined,
+        });
+      } else {
+        await createRendezVous({
+          patientId,
+          praticienId: praticienId || undefined,
+          debut: new Date(`${date}T${heure}`).toISOString(),
+          motif: motif || undefined,
+        });
+      }
       setPatientId('');
       setDate('');
       setHeure('09:00');
       setMotif('');
+      setCreneauChoisi(null);
+      setCreneaux([]);
       await charger();
     } catch (err) {
       gererErreur(err as Error, setFormError);
@@ -132,8 +182,19 @@ function Agenda({ onSessionExpiree }: Props) {
     fontSize: '0.8em',
   };
 
+  const pastille = (actif: boolean): React.CSSProperties => ({
+    border: actif ? '2px solid #0f766e' : '1px solid #0f766e',
+    background: actif ? '#0f766e' : 'transparent',
+    color: actif ? '#fff' : '#0f766e',
+    borderRadius: 4,
+    padding: '3px 10px',
+    fontSize: '0.85em',
+    cursor: 'pointer',
+  });
+
   const peutModifier = aPermission('rdv.modifier');
   const peutAnnuler = aPermission('rdv.annuler');
+  const modeCreneaux = praticienId !== '' && creneaux.length > 0;
 
   return (
     <>
@@ -156,16 +217,58 @@ function Agenda({ onSessionExpiree }: Props) {
                 ))}
               </select>
             </div>
-            <div className="row">
+            <div className="field">
+              <label>Praticien</label>
+              <select
+                value={praticienId}
+                onChange={(e) => setPraticienId(e.target.value)}
+              >
+                <option value="">Sans praticien désigné</option>
+                {praticiens.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.prenom} {p.nom}
+                    {p.specialite ? ` — ${p.specialite}` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="field">
+              <label>Date</label>
+              <input
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                required
+              />
+            </div>
+
+            {modeCreneaux && (
               <div className="field">
-                <label>Date</label>
-                <input
-                  type="date"
-                  value={date}
-                  onChange={(e) => setDate(e.target.value)}
-                  required
-                />
+                <label>Créneaux libres</label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {creneaux.map((c) => (
+                    <button
+                      key={c.debut}
+                      type="button"
+                      style={pastille(creneauChoisi?.debut === c.debut)}
+                      onClick={() => setCreneauChoisi(c)}
+                    >
+                      {c.heure}
+                    </button>
+                  ))}
+                </div>
               </div>
+            )}
+
+            {praticienId && date && !chargeCreneaux && creneaux.length === 0 && (
+              <p className="muted">
+                Aucun créneau libre ce jour (horaires non déclarés, congé ou
+                journée complète) — saisie manuelle de l'heure :
+              </p>
+            )}
+            {chargeCreneaux && <p className="muted">Recherche des créneaux…</p>}
+
+            {!modeCreneaux && (
               <div className="field">
                 <label>Heure</label>
                 <input
@@ -175,7 +278,8 @@ function Agenda({ onSessionExpiree }: Props) {
                   required
                 />
               </div>
-            </div>
+            )}
+
             <div className="field">
               <label>Motif</label>
               <input
@@ -185,8 +289,16 @@ function Agenda({ onSessionExpiree }: Props) {
               />
             </div>
             {formError && <p className="error">{formError}</p>}
-            <button type="submit" disabled={submitting} className="btn-primary">
-              {submitting ? 'Enregistrement…' : 'Planifier'}
+            <button
+              type="submit"
+              disabled={submitting || (modeCreneaux && !creneauChoisi)}
+              className="btn-primary"
+            >
+              {submitting
+                ? 'Enregistrement…'
+                : modeCreneaux && !creneauChoisi
+                  ? 'Choisissez un créneau'
+                  : 'Planifier'}
             </button>
           </form>
         </section>
