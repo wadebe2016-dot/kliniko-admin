@@ -786,3 +786,34 @@ export async function getDisponibilites(
   if (!res.ok) await echecOrdonnance(res, 'Erreur lors du calcul des creneaux');
   return res.json();
 }
+
+// ----------------------------------------------------------------------------
+// Tableau de bord
+// ----------------------------------------------------------------------------
+
+export type RdvProche = {
+  id: string;
+  debut: string;
+  statut: StatutRdv;
+  origine: 'clinique' | 'patient';
+  motif: string | null;
+  patient: { nom: string; prenom: string | null; numeroDossier: string };
+  praticien: { nom: string; prenom: string | null } | null;
+};
+
+export type TableauDeBordStats = {
+  patientsTotal?: number;
+  rdvAujourdHui?: number;
+  demandesEnAttente?: number;
+  prochainsRdv?: RdvProche[];
+  encaisseAujourdHui?: number;
+  facturesOuvertes?: number;
+  montantImpaye?: number;
+  consultationsAujourdHui?: number;
+};
+
+export async function getTableauDeBord(): Promise<TableauDeBordStats> {
+  const res = await appelApi('/stats/tableau-de-bord');
+  if (!res.ok) throw new Error('Erreur lors du chargement du tableau de bord');
+  return res.json();
+}
