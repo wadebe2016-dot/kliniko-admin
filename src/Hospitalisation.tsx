@@ -59,6 +59,9 @@ export default function Hospitalisation({
   const [aMotif, setAMotif] = useState('');
   const [aNotes, setANotes] = useState('');
 
+  // Chambres cochees dans le plan (actions Modifier / Supprimer)
+  const [cochees, setCochees] = useState<string[]>([]);
+
   // Nouvelle chambre / modification
   const [cEdition, setCEdition] = useState<string | null>(null);
   const [cNumero, setCNumero] = useState('');
@@ -194,21 +197,57 @@ export default function Hospitalisation({
     }
   }
 
-  async function supprimer(c: ChambreOccupation) {
-    if (!window.confirm(`Supprimer la chambre ${c.numero} ?`)) return;
+  function basculer(id: string) {
+    setCochees((x) =>
+      x.includes(id) ? x.filter((i) => i !== id) : [...x, id],
+    );
+  }
+
+  function modifierCochee() {
+    const c = chambres.find((x) => x.id === cochees[0]);
+    if (c) editerChambre(c);
+  }
+
+  async function supprimerCochees() {
+    const cibles = chambres.filter((c) => cochees.includes(c.id));
+    if (cibles.length === 0) return;
+    const noms = cibles.map((c) => c.numero).join(', ');
+    if (
+      !window.confirm(
+        `Supprimer ${cibles.length > 1 ? 'les chambres' : 'la chambre'} ${noms} ?`,
+      )
+    )
+      return;
     setEnCours(true);
     setErreur(null);
     setInfo(null);
-    try {
-      await supprimerChambre(c.id);
-      if (cEdition === c.id) viderFormChambre();
-      setInfo('Chambre supprimée.');
-      await charger();
-    } catch (e) {
-      traiter(e);
-    } finally {
-      setEnCours(false);
+    const refus: string[] = [];
+    let supprimees = 0;
+    for (const c of cibles) {
+      try {
+        await supprimerChambre(c.id);
+        supprimees += 1;
+        if (cEdition === c.id) viderFormChambre();
+      } catch (e) {
+        const m = (e as Error).message;
+        if (m.includes('reconnecter')) {
+          onSessionExpiree();
+          return;
+        }
+        refus.push(m);
+      }
     }
+    setCochees([]);
+    if (refus.length > 0) setErreur(refus.join(' — '));
+    if (supprimees > 0) {
+      setInfo(
+        supprimees > 1
+          ? `${supprimees} chambres supprimées.`
+          : 'Chambre supprimée.',
+      );
+    }
+    await charger();
+    setEnCours(false);
   }
 
   async function sortie(s: Sejour, facturer: boolean) {
@@ -390,6 +429,29 @@ export default function Hospitalisation({
           <span className="count">
             {litsOccupes}/{litsTotal} lits occupés
           </span>
+          {peutGerer && cochees.length > 0 && (
+            <span style={{ marginLeft: 'auto' }}>
+              <button
+                type="button"
+                disabled={enCours || cochees.length !== 1}
+                title={
+                  cochees.length !== 1
+                    ? 'Cochez une seule chambre pour la modifier'
+                    : ''
+                }
+                onClick={modifierCochee}
+              >
+                Modifier
+              </button>{' '}
+              <button
+                type="button"
+                disabled={enCours}
+                onClick={supprimerCochees}
+              >
+                Supprimer{cochees.length > 1 ? ` (${cochees.length})` : ''}
+              </button>
+            </span>
+          )}
         </div>
         {chargement && <p className="muted">Chargement…</p>}
         {!peutGerer && erreur && <p className="error">{erreur}</p>}
@@ -398,37 +460,36 @@ export default function Hospitalisation({
         )}
         {chambres.map((c) => (
           <div key={c.id} style={{ marginBottom: 14 }}>
-            <div style={{ fontWeight: 600, marginBottom: 6 }}>
-              Chambre {c.numero}
-              <span className="muted" style={{ fontWeight: 400 }}>
-                {' '}
-                {[
-                  c.categorie,
-                  c.tarifJournalier !== null
-                    ? `${XAF(c.tarifJournalier)}/jour`
-                    : null,
-                ]
-                  .filter(Boolean)
-                  .join(' · ')}
-              </span>
+            <div
+              style={{
+                fontWeight: 600,
+                marginBottom: 6,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+              }}
+            >
               {peutGerer && (
-                <span style={{ marginLeft: 10 }}>
-                  <button
-                    type="button"
-                    disabled={enCours}
-                    onClick={() => editerChambre(c)}
-                  >
-                    Modifier
-                  </button>{' '}
-                  <button
-                    type="button"
-                    disabled={enCours}
-                    onClick={() => supprimer(c)}
-                  >
-                    Supprimer
-                  </button>
-                </span>
+                <input
+                  type="checkbox"
+                  checked={cochees.includes(c.id)}
+                  onChange={() => basculer(c.id)}
+                />
               )}
+              <span>
+                Chambre {c.numero}
+                <span className="muted" style={{ fontWeight: 400 }}>
+                  {' '}
+                  {[
+                    c.categorie,
+                    c.tarifJournalier !== null
+                      ? `${XAF(c.tarifJournalier)}/jour`
+                      : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </span>
+              </span>
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
               {c.lits.map((l) => (
