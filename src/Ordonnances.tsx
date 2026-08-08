@@ -39,9 +39,10 @@ function libelleStatut(s: Ordonnance['statut']): string {
   return s === 'brouillon' ? 'Brouillon' : s === 'validee' ? 'Signée' : 'Annulée';
 }
 
-// L'impression passe par un cadre invisible plutot que par une fenetre :
-// les bloqueurs de fenetres surgissantes ne s'y opposent pas.
-async function imprimer(o: Ordonnance) {
+// Le gabarit d'impression : une page A4 autonome, avec le code QR de
+// verification publique. Rendu dans la modale d'apercu, puis imprime
+// via un cadre invisible (les bloqueurs de fenetres ne s'y opposent pas).
+function gabaritOrdonnance(o: Ordonnance, qr: string): string {
   const patient = `${o.patient.nom} ${o.patient.prenom ?? ''}`.trim();
   const age = o.patient.dateNaissance
     ? Math.floor(
@@ -51,17 +52,6 @@ async function imprimer(o: Ordonnance) {
   const praticien = o.praticien
     ? `${o.praticien.prenom ?? ''} ${o.praticien.nom}`.trim()
     : '';
-
-  // Code QR vers la page publique de verification
-  let qr = '';
-  try {
-    qr = await QRCode.toDataURL(
-      `${window.location.origin}/api/public/ordonnances/${o.id}`,
-      { margin: 0, width: 240 },
-    );
-  } catch {
-    // sans QR : l'impression reste possible
-  }
 
   const bandeau =
     o.statut === 'brouillon'
@@ -103,12 +93,14 @@ async function imprimer(o: Ordonnance) {
     ? `Fait à ${echapper(o.hopital.ville)}, le ${jour(o.dateOrdonnance)}`
     : `Le ${jour(o.dateOrdonnance)}`;
 
-  const html = `<!DOCTYPE html>
+  return `<!DOCTYPE html>
 <html lang="fr"><head><meta charset="utf-8"><title>${echapper(o.numero)}</title>
 <style>
   @page { size: A4; margin: 14mm 15mm; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: "Segoe UI", Helvetica, Arial, sans-serif; color: #1c2430; font-size: 10.5pt; }
+  body { font-family: "Segoe UI", Helvetica, Arial, sans-serif; color: #1c2430;
+         font-size: 10.5pt; padding: 16px; }
+  @media print { body { padding: 0; } }
   .entete { display: flex; justify-content: space-between; align-items: flex-start;
             border-bottom: 3px solid #0f766e; padding-bottom: 12px; }
   .clinique h1 { font-size: 19pt; color: #0f766e; letter-spacing: 0.5px; }
@@ -190,7 +182,10 @@ ${o.notes ? `<div class="notes">${echapper(o.notes)}</div>` : ''}
 </div>
 <div class="pied">Ordonnance ${echapper(o.numero)} — ${echapper(o.hopital.nom)}</div>
 </body></html>`;
+}
 
+// Impression par cadre invisible
+function imprimerHtml(html: string) {
   const cadre = document.createElement('iframe');
   cadre.style.position = 'fixed';
   cadre.style.right = '0';
@@ -226,8 +221,23 @@ export default function Ordonnances({
   const [saisie, setSaisie] = useState({ ...LIGNE_VIDE });
   const [enCours, setEnCours] = useState(false);
   const [selection, setSelection] = useState<Ordonnance | null>(null);
+  const [apercu, setApercu] = useState<{ numero: string; html: string } | null>(null);
 
   const peutRediger = aPermission('ordonnance.creer');
+
+  async function ouvrirApercu(o: Ordonnance) {
+    let qr = '';
+    try {
+      qr = await QRCode.toDataURL(
+        `${window.location.origin}/api/public/ordonnances/${o.id}`,
+        { margin: 0, width: 240 },
+      );
+    } catch (e) {
+      // L'apercu reste possible sans QR ; la console dira pourquoi
+      console.error('Generation du code QR impossible', e);
+    }
+    setApercu({ numero: o.numero, html: gabaritOrdonnance(o, qr) });
+  }
 
   function traiter(e: unknown) {
     const message = (e as Error).message;
@@ -594,8 +604,8 @@ export default function Ordonnances({
           </ol>
           {selection.notes && <p>{selection.notes}</p>}
           <div className="row">
-            <button type="button" onClick={() => imprimer(selection)}>
-              Imprimer
+            <button type="button" onClick={() => ouvrirApercu(selection)}>
+              Aperçu / Imprimer
             </button>
             {peutRediger && selection.statut === 'brouillon' && (
               <button
@@ -618,6 +628,60 @@ export default function Ordonnances({
             )}
           </div>
         </section>
+      )}
+
+      {apercu && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(12, 42, 40, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 50,
+          }}
+          onClick={() => setApercu(null)}
+        >
+          <div
+            className="card"
+            style={{
+              width: 'min(820px, 96vw)',
+              maxHeight: '92vh',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 10,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <h2 style={{ marginRight: 'auto' }}>
+                Ordonnance {apercu.numero}
+              </h2>
+              <button type="button" onClick={() => setApercu(null)}>
+                Fermer
+              </button>
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={() => imprimerHtml(apercu.html)}
+              >
+                Imprimer
+              </button>
+            </div>
+            <iframe
+              title="Aperçu de l'ordonnance"
+              srcDoc={apercu.html}
+              style={{
+                width: '100%',
+                height: '72vh',
+                border: '1px solid #e2e8f0',
+                borderRadius: 8,
+                background: '#fff',
+              }}
+            />
+          </div>
+        </div>
       )}
     </>
   );
