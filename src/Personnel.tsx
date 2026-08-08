@@ -12,6 +12,7 @@ import {
   type StatutPersonnel,
   type TableauRh,
 } from './api';
+import Paie from './Paie';
 
 const XAF = (n: number) => n.toLocaleString('fr-FR') + ' XAF';
 const jourIso = (iso: string | null | undefined) =>
@@ -134,7 +135,7 @@ export default function Personnel({
   const estRh = aPermission('personnel.rh');
 
   // Onglets internes, sur le modele Edufo
-  const [onglet, setOnglet] = useState<'tableau' | 'dossiers'>(
+  const [onglet, setOnglet] = useState<'tableau' | 'dossiers' | 'paie'>(
     estRh ? 'tableau' : 'dossiers',
   );
   const [tdb, setTdb] = useState<TableauRh | null>(null);
@@ -307,13 +308,28 @@ export default function Personnel({
         >
           Dossiers du personnel
         </button>
-        <button type="button" disabled style={{ padding: '6px 16px' }} title="Phase 2 — à venir">
-          Paie
-        </button>
-        <button type="button" disabled style={{ padding: '6px 16px' }} title="Phase 2 — à venir">
+        {estRh ? (
+          <button
+            type="button"
+            className={onglet === 'paie' ? 'btn-primary' : ''}
+            style={{ padding: '6px 16px' }}
+            onClick={() => setOnglet('paie')}
+          >
+            Paie
+          </button>
+        ) : (
+          <button type="button" disabled style={{ padding: '6px 16px' }} title="Réservé au volet RH">
+            Paie
+          </button>
+        )}
+        <button type="button" disabled style={{ padding: '6px 16px' }} title="Phase 3 — à venir">
           Congés
         </button>
       </div>
+
+      {onglet === 'paie' && estRh && (
+        <Paie onSessionExpiree={onSessionExpiree} />
+      )}
 
       {onglet === 'tableau' && estRh && tdb && (
         <>
