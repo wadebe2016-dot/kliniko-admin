@@ -1,9 +1,11 @@
 ﻿import { useEffect, useState } from 'react';
 import {
   aPermission,
+  annulerFacture,
   createFacture,
   demanderPaiementMobile,
   encaisserFacture,
+  modifierLignesFacture,
   getActes,
   getFacture,
   getFactures,
@@ -257,6 +259,12 @@ function Factures({ onSessionExpiree }: Props) {
     null,
   );
 
+  // Modification des lignes (facture ouverte, sans paiement)
+  const [edition, setEdition] = useState(false);
+  const [lignesEdit, setLignesEdit] = useState<
+    { id: string; libelle: string; prixUnitaire: number; quantite: number }[]
+  >([]);
+
   // Paiement Mobile Money en cours de validation par le client
   const [attente, setAttente] = useState<DemandePaiementMobile | null>(null);
   const [messagePaiement, setMessagePaiement] = useState<string | null>(null);
@@ -372,8 +380,66 @@ function Factures({ onSessionExpiree }: Props) {
       setEncaisseError(null);
       setAttente(null);
       setMessagePaiement(null);
+      setEdition(false);
     } catch (e) {
       gererErreur(e as Error, setError);
+    }
+  }
+
+  const peutCorriger = (f: Facture) =>
+    aPermission('facture.creer') &&
+    f.statut === 'ouverte' &&
+    Number(f.montantPaye) === 0;
+
+  function demarrerEdition() {
+    if (!detail) return;
+    setLignesEdit(
+      (detail.lignes ?? []).map((l) => ({
+        id: l.id,
+        libelle: l.libelle,
+        prixUnitaire: Number(l.prixUnitaire),
+        quantite: l.quantite,
+      })),
+    );
+    setEdition(true);
+    setEncaisseError(null);
+  }
+
+  async function enregistrerLignes() {
+    if (!detail) return;
+    setEncaissement(true);
+    setEncaisseError(null);
+    try {
+      const f = await modifierLignesFacture(detail.id, {
+        lignes: lignesEdit.map((l) => ({ ligneId: l.id, quantite: l.quantite })),
+      });
+      setDetail(f);
+      setEdition(false);
+      const reste = Number(f.montantTotal) - Number(f.montantPaye);
+      setMontant(reste > 0 ? String(reste) : '');
+      await charger();
+    } catch (err) {
+      gererErreur(err as Error, setEncaisseError);
+    } finally {
+      setEncaissement(false);
+    }
+  }
+
+  async function annulerLaFacture() {
+    if (!detail) return;
+    const motif = window.prompt("Motif de l'annulation de la facture ?");
+    if (!motif || !motif.trim()) return;
+    setEncaissement(true);
+    setEncaisseError(null);
+    try {
+      const f = await annulerFacture(detail.id, motif.trim());
+      setDetail(f);
+      setEdition(false);
+      await charger();
+    } catch (err) {
+      gererErreur(err as Error, setEncaisseError);
+    } finally {
+      setEncaissement(false);
     }
   }
 
@@ -612,11 +678,34 @@ function Factures({ onSessionExpiree }: Props) {
               {detail.numero} — {detail.patient.nom}{' '}
               {detail.patient.prenom ?? ''}
             </h2>
+            {peutCorriger(detail) && !edition && (
+              <>
+                <button
+                  type="button"
+                  style={{
+                    marginLeft: 'auto',
+                    padding: '2px 10px',
+                    cursor: 'pointer',
+                  }}
+                  onClick={demarrerEdition}
+                >
+                  Modifier
+                </button>
+                <button
+                  type="button"
+                  style={{ padding: '2px 10px', cursor: 'pointer' }}
+                  onClick={annulerLaFacture}
+                  disabled={encaissement}
+                >
+                  Annuler la facture
+                </button>
+              </>
+            )}
             <button
               type="button"
               className="btn-primary"
               style={{
-                marginLeft: 'auto',
+                marginLeft: peutCorriger(detail) && !edition ? 0 : 'auto',
                 padding: '2px 12px',
                 cursor: 'pointer',
               }}
@@ -635,26 +724,116 @@ function Factures({ onSessionExpiree }: Props) {
               Fermer
             </button>
           </div>
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Acte</th>
-                <th>Qté</th>
-                <th>P.U.</th>
-                <th>Montant</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(detail.lignes ?? []).map((l) => (
-                <tr key={l.id}>
-                  <td>{l.libelle}</td>
-                  <td className="mono">{l.quantite}</td>
-                  <td className="mono">{fmt(l.prixUnitaire)}</td>
-                  <td className="mono">{fmt(l.montant)}</td>
+          {!edition && (
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Acte</th>
+                  <th>Qté</th>
+                  <th>P.U.</th>
+                  <th>Montant</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {(detail.lignes ?? []).map((l) => (
+                  <tr key={l.id}>
+                    <td>{l.libelle}</td>
+                    <td className="mono">{l.quantite}</td>
+                    <td className="mono">{fmt(l.prixUnitaire)}</td>
+                    <td className="mono">{fmt(l.montant)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+          {edition && (
+            <>
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Acte</th>
+                    <th>Qté (0 = retirer)</th>
+                    <th>P.U.</th>
+                    <th>Montant</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lignesEdit.map((l, i) => (
+                    <tr key={l.id}>
+                      <td>{l.libelle}</td>
+                      <td>
+                        <input
+                          type="number"
+                          min={0}
+                          value={l.quantite}
+                          style={{ width: 70 }}
+                          onChange={(e) =>
+                            setLignesEdit(
+                              lignesEdit.map((x, j) =>
+                                j === i
+                                  ? {
+                                      ...x,
+                                      quantite: Math.max(
+                                        0,
+                                        Number(e.target.value),
+                                      ),
+                                    }
+                                  : x,
+                              ),
+                            )
+                          }
+                        />
+                      </td>
+                      <td className="mono">{fmt(l.prixUnitaire)}</td>
+                      <td className="mono">{fmt(l.quantite * l.prixUnitaire)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <p>
+                Nouveau total :{' '}
+                <strong>
+                  {fmt(
+                    lignesEdit.reduce(
+                      (s, l) => s + l.quantite * l.prixUnitaire,
+                      0,
+                    ),
+                  )}{' '}
+                  {detail.devise}
+                </strong>
+              </p>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                <button
+                  type="button"
+                  className="btn-primary"
+                  disabled={encaissement}
+                  onClick={enregistrerLignes}
+                  style={{ padding: '6px 16px', margin: 0 }}
+                >
+                  {encaissement ? 'Enregistrement…' : 'Enregistrer'}
+                </button>
+                <button
+                  type="button"
+                  disabled={encaissement}
+                  onClick={() => setEdition(false)}
+                  style={{ padding: '6px 16px' }}
+                >
+                  Abandonner
+                </button>
+              </div>
+            </>
+          )}
+          {detail.statut === 'annulee' &&
+            (detail as unknown as { motifAnnulation?: string | null })
+              .motifAnnulation && (
+              <p className="error">
+                Annulée :{' '}
+                {
+                  (detail as unknown as { motifAnnulation?: string | null })
+                    .motifAnnulation
+                }
+              </p>
+            )}
           <p>
             Total : <strong>{fmt(detail.montantTotal)} {detail.devise}</strong>
             {' — '}Payé : <strong>{fmt(detail.montantPaye)}</strong>
@@ -719,6 +898,7 @@ function Factures({ onSessionExpiree }: Props) {
 
           {aPermission('facture.encaisser') &&
             !attente &&
+            !edition &&
             detail.statut !== 'reglee' &&
             detail.statut !== 'annulee' && (
               <form

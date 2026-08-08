@@ -1132,3 +1132,35 @@ export async function ajustementConsommable(data: {
   });
   if (!res.ok) await echecOrdonnance(res, "Erreur lors de l'ajustement");
 }
+
+export async function modifierLignesFacture(
+  factureId: string,
+  data: { lignes: { ligneId: string; quantite: number }[] },
+): Promise<Facture> {
+  const res = await appelApi(
+    `/factures/${encodeURIComponent(factureId)}/lignes`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    },
+  );
+  if (!res.ok) await echecOrdonnance(res, 'Erreur lors de la modification de la facture');
+  return res.json();
+}
+
+export async function annulerFacture(
+  factureId: string,
+  motif: string,
+): Promise<Facture> {
+  const res = await appelApi(
+    `/factures/${encodeURIComponent(factureId)}/annulation`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ motif }),
+    },
+  );
+  if (!res.ok) await echecOrdonnance(res, "Erreur lors de l'annulation de la facture");
+  return res.json();
+}
