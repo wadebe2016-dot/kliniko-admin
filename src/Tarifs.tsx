@@ -5,6 +5,7 @@ import {
   modifierActe,
   nouveauTarifActe,
   getTarifsMedicaments,
+  creerMedicament,
   modifierPrixMedicament,
   aPermission,
   type ActeTarif,
@@ -31,6 +32,12 @@ export default function Tarifs({
   const [nCode, setNCode] = useState('');
   const [nLibelle, setNLibelle] = useState('');
   const [nMontant, setNMontant] = useState('');
+
+  // Nouveau medicament
+  const [dDenomination, setDDenomination] = useState('');
+  const [dDosage, setDDosage] = useState('');
+  const [dForme, setDForme] = useState('');
+  const [dPrix, setDPrix] = useState('');
 
   // Modale de modification (acte ou medicament)
   const [mActe, setMActe] = useState<ActeTarif | null>(null);
@@ -90,6 +97,34 @@ export default function Tarifs({
       setNLibelle('');
       setNMontant('');
       setInfo('Acte ajouté à la mercuriale.');
+      await charger();
+    } catch (e) {
+      traiter(e);
+    } finally {
+      setEnCours(false);
+    }
+  }
+
+  async function validerNouveauMedicament() {
+    if (!dDenomination.trim()) {
+      setErreur('Indiquez la dénomination du médicament');
+      return;
+    }
+    setEnCours(true);
+    setErreur(null);
+    setInfo(null);
+    try {
+      await creerMedicament({
+        denomination: dDenomination.trim(),
+        dosage: dDosage.trim() || undefined,
+        forme: dForme.trim() || undefined,
+        prixVente: dPrix ? Number(dPrix) : undefined,
+      });
+      setDDenomination('');
+      setDDosage('');
+      setDForme('');
+      setDPrix('');
+      setInfo('Médicament ajouté au catalogue.');
       await charger();
     } catch (e) {
       traiter(e);
@@ -213,6 +248,50 @@ export default function Tarifs({
               Un nouveau tarif prend effet immédiatement ; l'ancien est archivé
               et les factures déjà émises ne changent jamais.
             </p>
+
+            <h2 style={{ marginTop: 18 }}>Nouveau médicament</h2>
+            <div className="field">
+              <label>Dénomination</label>
+              <input
+                value={dDenomination}
+                onChange={(e) => setDDenomination(e.target.value)}
+                placeholder="Ibuprofène"
+              />
+            </div>
+            <div className="row">
+              <div className="field">
+                <label>Dosage</label>
+                <input
+                  value={dDosage}
+                  onChange={(e) => setDDosage(e.target.value)}
+                  placeholder="400 mg"
+                />
+              </div>
+              <div className="field">
+                <label>Forme</label>
+                <input
+                  value={dForme}
+                  onChange={(e) => setDForme(e.target.value)}
+                  placeholder="Comprimé, sirop…"
+                />
+              </div>
+            </div>
+            <div className="field">
+              <label>Prix de vente (XAF)</label>
+              <input
+                type="number"
+                min={0}
+                value={dPrix}
+                onChange={(e) => setDPrix(e.target.value)}
+              />
+            </div>
+            <button
+              type="button"
+              disabled={enCours}
+              onClick={validerNouveauMedicament}
+            >
+              Ajouter au catalogue
+            </button>
             {erreur && <p className="error">{erreur}</p>}
             {info && <p className="muted">{info}</p>}
           </div>

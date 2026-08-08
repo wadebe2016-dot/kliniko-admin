@@ -1253,3 +1253,19 @@ export async function modifierPrixMedicament(
   );
   if (!res.ok) await echecOrdonnance(res, 'Erreur lors du changement de prix');
 }
+
+export async function creerMedicament(data: {
+  denomination: string;
+  dosage?: string;
+  forme?: string;
+  code?: string;
+  prixVente?: number;
+  seuilAlerte?: number;
+}): Promise<void> {
+  const res = await appelApi('/tarifs/medicaments', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) await echecOrdonnance(res, 'Erreur lors de la création du médicament');
+}
