@@ -586,7 +586,27 @@ function Factures({ onSessionExpiree }: Props) {
       </section>
 
       {detail && (
-        <section className="card list-card">
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(12, 42, 40, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 40,
+          }}
+          onClick={() => setDetail(null)}
+        >
+        <section
+          className="card list-card"
+          style={{
+            width: 'min(820px, 96vw)',
+            maxHeight: '90vh',
+            overflowY: 'auto',
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
           <div className="list-header">
             <h2>
               {detail.numero} — {detail.patient.nom}{' '}
@@ -755,6 +775,7 @@ function Factures({ onSessionExpiree }: Props) {
             )}
           {encaisseError && <p className="error">{encaisseError}</p>}
         </section>
+        </div>
       )}
 
       {recu && (
