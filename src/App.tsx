@@ -54,7 +54,7 @@ const TITRES: Record<Vue, string> = {
   tresorerie: 'Trésorerie',
   pharmacie: 'Pharmacie et stock',
   hospitalisation: 'Chambres et hospitalisation',
-  consommables: 'Consommables',
+  consommables: 'Gestion des stocks',
   patrimoine: 'Patrimoine et actifs',
   personnel: 'Personnel',
   disponibilites: 'Horaires et disponibilités',
@@ -94,7 +94,7 @@ const GROUPES: {
     entrees: [
       { vue: 'pharmacie', libelle: 'Pharmacie', perm: 'pharmacie.lire' },
       { vue: 'hospitalisation', libelle: 'Hospitalisation', perm: 'hospitalisation.lire' },
-      { vue: 'consommables', libelle: 'Consommables', perm: 'consommable.lire' },
+      { vue: 'consommables', libelle: 'Stocks', perm: 'consommable.lire' },
       { vue: 'patrimoine', libelle: 'Patrimoine', perm: 'patrimoine.lire' },
     ],
   },

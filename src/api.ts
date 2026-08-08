@@ -1052,6 +1052,8 @@ export type ArticleConsommable = {
   prixUnitaire: number | null;
   stock: number;
   sousSeuil: boolean;
+  note: string | null;
+  actif: boolean;
   peremptionProche: string | null;
 };
 
@@ -1084,6 +1086,7 @@ export async function creerConsommable(data: {
   unite?: string;
   seuilAlerte?: number;
   prixUnitaire?: number;
+  note?: string;
 }): Promise<void> {
   const res = await appelApi('/consommables', {
     method: 'POST',
@@ -1763,4 +1766,29 @@ export async function supprimerMouvementConsommable(id: string): Promise<void> {
     { method: 'DELETE' },
   );
   if (!res.ok) await echecOrdonnance(res, 'Erreur lors de la suppression du mouvement');
+}
+
+export async function modifierConsommable(
+  id: string,
+  data: {
+    designation?: string;
+    unite?: string;
+    seuilAlerte?: number;
+    note?: string;
+    actif?: boolean;
+  },
+): Promise<void> {
+  const res = await appelApi(`/consommables/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) await echecOrdonnance(res, "Erreur lors de la modification de l'article");
+}
+
+export async function supprimerConsommable(id: string): Promise<void> {
+  const res = await appelApi(`/consommables/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) await echecOrdonnance(res, "Erreur lors de la suppression de l'article");
 }
