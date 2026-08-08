@@ -51,6 +51,7 @@ export default function Patrimoine({
   const [nLocalisation, setNLocalisation] = useState('');
   const [nValeur, setNValeur] = useState('');
   const [nDate, setNDate] = useState('');
+  const [nDuree, setNDuree] = useState('');
 
   // Modale de modification
   const [mActif, setMActif] = useState<Actif | null>(null);
@@ -58,6 +59,7 @@ export default function Patrimoine({
   const [mCategorie, setMCategorie] = useState('');
   const [mLocalisation, setMLocalisation] = useState('');
   const [mValeur, setMValeur] = useState('');
+  const [mDuree, setMDuree] = useState('');
   const [mEtat, setMEtat] = useState<EtatActif>('en_service');
   const [mMotif, setMMotif] = useState('');
   const [mErreur, setMErreur] = useState<string | null>(null);
@@ -107,6 +109,7 @@ export default function Patrimoine({
         localisation: nLocalisation.trim() || undefined,
         valeurAcquisition: nValeur ? Number(nValeur) : undefined,
         dateAcquisition: nDate || undefined,
+        dureeAmortAnnees: nDuree ? Number(nDuree) : undefined,
       });
       setNDesignation('');
       setNCode('');
@@ -114,6 +117,7 @@ export default function Patrimoine({
       setNLocalisation('');
       setNValeur('');
       setNDate('');
+      setNDuree('');
       setInfo('Actif ajouté au patrimoine.');
       await charger();
     } catch (e) {
@@ -131,6 +135,7 @@ export default function Patrimoine({
     setMValeur(
       a.valeurAcquisition !== null ? String(a.valeurAcquisition) : '',
     );
+    setMDuree(a.dureeAmortAnnees !== null ? String(a.dureeAmortAnnees) : '');
     setMEtat(a.etat);
     setMMotif('');
     setMErreur(null);
@@ -159,6 +164,7 @@ export default function Patrimoine({
         categorie: mCategorie.trim(),
         localisation: mLocalisation.trim(),
         valeurAcquisition: mValeur ? Number(mValeur) : undefined,
+        dureeAmortAnnees: mDuree ? Number(mDuree) : undefined,
       });
       if (mEtat !== mActif.etat) {
         await changerEtatActif(mActif.id, {
@@ -182,6 +188,9 @@ export default function Patrimoine({
   const valeurTotale = actifs
     .filter((a) => a.etat !== 'reforme')
     .reduce((s, a) => s + (a.valeurAcquisition ?? 0), 0);
+  const valeurResiduelleTotale = actifs
+    .filter((a) => a.etat !== 'reforme')
+    .reduce((s, a) => s + (a.valeurResiduelle ?? 0), 0);
   const horsService = actifs.filter(
     (a) => a.etat === 'en_panne' || a.etat === 'en_maintenance',
   ).length;
@@ -245,6 +254,16 @@ export default function Patrimoine({
                 />
               </div>
             </div>
+            <div className="field">
+              <label>Durée d'amortissement (années)</label>
+              <input
+                type="number"
+                min={1}
+                value={nDuree}
+                onChange={(e) => setNDuree(e.target.value)}
+                placeholder="5"
+              />
+            </div>
             <button
               type="button"
               className="btn-primary"
@@ -263,8 +282,15 @@ export default function Patrimoine({
         <div className="list-header">
           <h2>Inventaire</h2>
           <span className="count">{actifs.length}</span>
-          <span className="count" style={{ background: '#e6f4ec', color: '#1c6b3c' }}>
-            {XAF(valeurTotale)}
+          <span className="count" title="Valeur d'acquisition">
+            Acquis : {XAF(valeurTotale)}
+          </span>
+          <span
+            className="count"
+            style={{ background: '#e6f4ec', color: '#1c6b3c' }}
+            title="Valeur résiduelle après amortissement linéaire"
+          >
+            Résiduel : {XAF(valeurResiduelleTotale)}
           </span>
           {horsService > 0 && (
             <span className="count" style={{ background: '#fdece7', color: '#8c3520' }}>
@@ -282,7 +308,8 @@ export default function Patrimoine({
                 <th>Désignation</th>
                 <th>Catégorie</th>
                 <th>Localisation</th>
-                <th>Valeur</th>
+                <th>Valeur acq.</th>
+                <th>Résiduelle</th>
                 <th>État</th>
               </tr>
             </thead>
@@ -300,6 +327,12 @@ export default function Patrimoine({
                   <td className="muted">{a.localisation ?? '—'}</td>
                   <td className="mono">
                     {a.valeurAcquisition !== null ? XAF(a.valeurAcquisition) : '—'}
+                  </td>
+                  <td className="mono">
+                    {a.valeurResiduelle !== null ? XAF(a.valeurResiduelle) : '—'}
+                    {a.dureeAmortAnnees && (
+                      <span className="muted"> /{a.dureeAmortAnnees} ans</span>
+                    )}
                   </td>
                   <td>
                     <span className="badge-app" style={ETAT_STYLE[a.etat]}>
@@ -391,15 +424,31 @@ export default function Patrimoine({
                   />
                 </div>
               </div>
-              <div className="field">
-                <label>Valeur d'acquisition (XAF)</label>
-                <input
-                  type="number"
-                  min={0}
-                  value={mValeur}
-                  onChange={(e) => setMValeur(e.target.value)}
-                />
+              <div className="row">
+                <div className="field">
+                  <label>Valeur d'acquisition (XAF)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={mValeur}
+                    onChange={(e) => setMValeur(e.target.value)}
+                  />
+                </div>
+                <div className="field">
+                  <label>Amortissement (années)</label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={mDuree}
+                    onChange={(e) => setMDuree(e.target.value)}
+                  />
+                </div>
               </div>
+              {mActif.valeurResiduelle !== null && (
+                <p className="muted">
+                  Valeur résiduelle actuelle : {XAF(mActif.valeurResiduelle)}
+                </p>
+              )}
               <div className="row">
                 <div className="field">
                   <label>État</label>

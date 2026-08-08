@@ -1284,6 +1284,8 @@ export type Actif = {
   localisation: string | null;
   dateAcquisition: string | null;
   valeurAcquisition: number | null;
+  dureeAmortAnnees: number | null;
+  valeurResiduelle: number | null;
   etat: EtatActif;
   notes: string | null;
   createdAt: string;
@@ -1333,6 +1335,7 @@ export async function modifierActif(
     categorie?: string;
     localisation?: string;
     valeurAcquisition?: number;
+    dureeAmortAnnees?: number;
     notes?: string;
   },
 ): Promise<void> {
