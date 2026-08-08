@@ -55,7 +55,7 @@ const TITRES: Record<Vue, string> = {
   pharmacie: 'Pharmacie et stock',
   hospitalisation: 'Chambres et hospitalisation',
   consommables: 'Gestion des stocks',
-  patrimoine: 'Patrimoine et actifs',
+  patrimoine: "Patrimoine de l'établissement",
   personnel: 'Personnel',
   disponibilites: 'Horaires et disponibilités',
   utilisateurs: 'Utilisateurs et rôles',
