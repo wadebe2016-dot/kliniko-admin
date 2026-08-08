@@ -29,6 +29,23 @@ const TYPE_COMPTE_LIBELLE: Record<CompteTresorerie['type'], string> = {
   mobile_money: 'Mobile Money',
 };
 
+const PALETTE = [
+  '#1d4f91',
+  '#d64545',
+  '#e9a922',
+  '#1c9d55',
+  '#7c5cbf',
+  '#0e9488',
+  '#c2417e',
+  '#8a94a1',
+];
+
+const moisCourt = (aaaaMm: string) =>
+  new Date(`${aaaaMm}-01`).toLocaleDateString('fr-FR', {
+    month: 'short',
+    year: '2-digit',
+  });
+
 type Onglet = 'vue' | 'mouvements' | 'cdg' | 'comptes' | 'categories';
 type Saisie = 'recette' | 'depense' | 'transfert';
 
@@ -309,6 +326,39 @@ export default function Tresorerie({
     .reduce((s, m) => s + Number(m.montant), 0);
   const soldeTotal = comptes.reduce((s, c) => s + c.solde, 0);
 
+  // Depenses par categorie (periode affichee)
+  const depensesParCategorie = (() => {
+    const m = new Map<string, number>();
+    for (const mv of mouvements) {
+      if (mv.type !== 'depense') continue;
+      const cle = mv.categorie?.nom ?? 'Sans catégorie';
+      m.set(cle, (m.get(cle) ?? 0) + Number(mv.montant));
+    }
+    return [...m.entries()]
+      .map(([nom, montant]) => ({ nom, montant }))
+      .sort((a, b) => b.montant - a.montant);
+  })();
+
+  // Evolution mensuelle (periode affichee)
+  const parMois = (() => {
+    const m = new Map<string, { recettes: number; depenses: number }>();
+    for (const mv of mouvements) {
+      if (mv.type === 'transfert') continue;
+      const cle = String(mv.dateMouvement).slice(0, 7);
+      const e = m.get(cle) ?? { recettes: 0, depenses: 0 };
+      if (mv.type === 'recette') e.recettes += Number(mv.montant);
+      else e.depenses += Number(mv.montant);
+      m.set(cle, e);
+    }
+    return [...m.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([mois, v]) => ({ mois, ...v }));
+  })();
+  const maxMois = Math.max(
+    1,
+    ...parMois.flatMap((x) => [x.recettes, x.depenses]),
+  );
+
   const ONGLETS: { cle: Onglet; libelle: string }[] = [
     { cle: 'vue', libelle: "Vue d'ensemble" },
     { cle: 'mouvements', libelle: 'Mouvements' },
@@ -367,6 +417,34 @@ export default function Tresorerie({
 
       {onglet === 'vue' && (
         <>
+          <section className="card" style={{ marginBottom: 12 }}>
+            <div
+              style={{
+                display: 'flex',
+                gap: 8,
+                flexWrap: 'wrap',
+                alignItems: 'flex-end',
+              }}
+            >
+              <div className="field" style={{ margin: 0 }}>
+                <label>Du</label>
+                <input type="date" value={du} onChange={(e) => setDu(e.target.value)} />
+              </div>
+              <div className="field" style={{ margin: 0 }}>
+                <label>Au</label>
+                <input type="date" value={au} onChange={(e) => setAu(e.target.value)} />
+              </div>
+              <button type="button" onClick={() => raccourci('mois')}>
+                Ce mois-ci
+              </button>
+              <button type="button" onClick={() => raccourci('dernier')}>
+                Mois dernier
+              </button>
+              <button type="button" onClick={() => raccourci('trois')}>
+                3 derniers mois
+              </button>
+            </div>
+          </section>
           <div
             style={{
               display: 'grid',
@@ -406,6 +484,189 @@ export default function Tresorerie({
               </div>
             </section>
           </div>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+              gap: 12,
+              marginBottom: 14,
+            }}
+          >
+            <section className="card">
+              <h2 style={{ marginBottom: 10 }}>Dépenses par catégorie</h2>
+              {depensesParCategorie.length === 0 && (
+                <p className="muted">Aucune dépense sur la période.</p>
+              )}
+              {depensesParCategorie.length > 0 && (
+                <>
+                  {(() => {
+                    let acc = 0;
+                    const parts = depensesParCategorie.map((d, i) => {
+                      const debut = (acc / totalDepenses) * 100;
+                      acc += d.montant;
+                      const fin = (acc / totalDepenses) * 100;
+                      return `${PALETTE[i % PALETTE.length]} ${debut}% ${fin}%`;
+                    });
+                    return (
+                      <div
+                        style={{
+                          width: 120,
+                          height: 120,
+                          borderRadius: '50%',
+                          background: `conic-gradient(${parts.join(', ')})`,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          margin: '0 auto 12px',
+                        }}
+                      >
+                        <div
+                          style={{
+                            width: 66,
+                            height: 66,
+                            borderRadius: '50%',
+                            background: '#fff',
+                          }}
+                        />
+                      </div>
+                    );
+                  })()}
+                  {depensesParCategorie.map((d, i) => {
+                    const pct = totalDepenses > 0 ? (d.montant / totalDepenses) * 100 : 0;
+                    return (
+                      <div key={d.nom} style={{ marginBottom: 7 }}>
+                        <div
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            fontSize: 12.5,
+                            marginBottom: 2,
+                          }}
+                        >
+                          <span>
+                            <span
+                              style={{
+                                display: 'inline-block',
+                                width: 10,
+                                height: 10,
+                                borderRadius: 2,
+                                background: PALETTE[i % PALETTE.length],
+                                marginRight: 6,
+                              }}
+                            />
+                            {d.nom}
+                          </span>
+                          <span className="mono">
+                            {XAF(d.montant)} ({pct.toFixed(0)}%)
+                          </span>
+                        </div>
+                        <div
+                          style={{
+                            height: 7,
+                            borderRadius: 4,
+                            background: PALETTE[i % PALETTE.length],
+                            width: `${Math.max(2, pct)}%`,
+                          }}
+                        />
+                      </div>
+                    );
+                  })}
+                </>
+              )}
+            </section>
+            <section className="card">
+              <h2 style={{ marginBottom: 2 }}>Évolution mensuelle</h2>
+              <p className="muted" style={{ fontSize: 12, marginBottom: 12 }}>
+                Recettes et dépenses, mois par mois, sur la période.
+              </p>
+              {parMois.length === 0 && (
+                <p className="muted">Aucun mouvement sur la période.</p>
+              )}
+              {parMois.length > 0 && (
+                <>
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'flex-end',
+                      gap: 12,
+                      height: 160,
+                      padding: '0 4px',
+                      overflowX: 'auto',
+                    }}
+                  >
+                    {parMois.map((m) => (
+                      <div
+                        key={m.mois}
+                        style={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          gap: 4,
+                          flex: 'none',
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: 'flex',
+                            alignItems: 'flex-end',
+                            gap: 3,
+                            height: 130,
+                          }}
+                        >
+                          <div
+                            title={`Recettes : ${XAF(m.recettes)}`}
+                            style={{
+                              width: 14,
+                              borderRadius: '3px 3px 0 0',
+                              background: '#1c9d55',
+                              height: `${Math.max(2, (m.recettes / maxMois) * 100)}%`,
+                            }}
+                          />
+                          <div
+                            title={`Dépenses : ${XAF(m.depenses)}`}
+                            style={{
+                              width: 14,
+                              borderRadius: '3px 3px 0 0',
+                              background: '#d64545',
+                              height: `${Math.max(2, (m.depenses / maxMois) * 100)}%`,
+                            }}
+                          />
+                        </div>
+                        <span className="muted" style={{ fontSize: 11 }}>
+                          {moisCourt(m.mois)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ fontSize: 12, marginTop: 8 }}>
+                    <span
+                      style={{
+                        display: 'inline-block',
+                        width: 10,
+                        height: 10,
+                        borderRadius: 2,
+                        background: '#1c9d55',
+                        marginRight: 4,
+                      }}
+                    />
+                    Recettes{'  '}
+                    <span
+                      style={{
+                        display: 'inline-block',
+                        width: 10,
+                        height: 10,
+                        borderRadius: 2,
+                        background: '#d64545',
+                        margin: '0 4px 0 12px',
+                      }}
+                    />
+                    Dépenses
+                  </div>
+                </>
+              )}
+            </section>
+          </div>
+
           <section className="card">
             <div className="list-header">
               <h2>Soldes par compte</h2>
