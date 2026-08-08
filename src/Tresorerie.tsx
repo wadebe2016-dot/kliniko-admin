@@ -12,11 +12,16 @@ import {
   getBudget,
   definirLigneBudget,
   supprimerLigneBudget,
+  getCentresCout,
+  creerCentreCout,
+  getAnalytique,
   aPermission,
   type CompteTresorerie,
   type CategorieTresorerie,
   type MouvementTresorerie,
   type BudgetResume,
+  type CentreCout,
+  type AnalytiqueResume,
 } from './api';
 
 const XAF = (n: number) => n.toLocaleString('fr-FR') + ' FCFA';
@@ -46,7 +51,13 @@ const moisCourt = (aaaaMm: string) =>
     year: '2-digit',
   });
 
-type Onglet = 'vue' | 'mouvements' | 'cdg' | 'comptes' | 'categories';
+type Onglet =
+  | 'vue'
+  | 'mouvements'
+  | 'cdg'
+  | 'analytique'
+  | 'comptes'
+  | 'categories';
 type Saisie = 'recette' | 'depense' | 'transfert';
 
 export default function Tresorerie({
@@ -75,11 +86,18 @@ export default function Tresorerie({
   const [sCompte, setSCompte] = useState('');
   const [sCompteDest, setSCompteDest] = useState('');
   const [sCategorie, setSCategorie] = useState('');
+  const [sCentre, setSCentre] = useState('');
   const [sLibelle, setSLibelle] = useState('');
   const [sBeneficiaire, setSBeneficiaire] = useState('');
   const [sMontant, setSMontant] = useState('');
   const [sDate, setSDate] = useState(iso(new Date()));
   const [sErreur, setSErreur] = useState<string | null>(null);
+
+  // Analytique
+  const [centres, setCentres] = useState<CentreCout[]>([]);
+  const [analytique, setAnalytique] = useState<AnalytiqueResume | null>(null);
+  const [aCode, setACode] = useState('');
+  const [aNom, setANom] = useState('');
 
   // Controle de gestion
   const [annee, setAnnee] = useState(new Date().getFullYear());
@@ -109,14 +127,16 @@ export default function Tresorerie({
   const charger = useCallback(async () => {
     try {
       setChargement(true);
-      const [c, g, m] = await Promise.all([
+      const [c, g, m, cc] = await Promise.all([
         getComptesTresorerie(),
         getCategoriesTresorerie(),
         getMouvementsTresorerie(du, au),
+        getCentresCout(),
       ]);
       setComptes(c);
       setCategories(g);
       setMouvements(m);
+      setCentres(cc);
       setErreur(null);
     } catch (e) {
       traiter(e);
@@ -140,6 +160,34 @@ export default function Tresorerie({
   useEffect(() => {
     if (onglet === 'cdg') chargerBudget();
   }, [onglet, chargerBudget]);
+
+  const chargerAnalytique = useCallback(async () => {
+    try {
+      setAnalytique(await getAnalytique(du, au));
+    } catch (e) {
+      traiter(e);
+    }
+  }, [du, au, traiter]);
+
+  useEffect(() => {
+    if (onglet === 'analytique') chargerAnalytique();
+  }, [onglet, chargerAnalytique]);
+
+  async function validerCentre() {
+    if (!aCode.trim() || !aNom.trim()) return;
+    setEnCours(true);
+    try {
+      await creerCentreCout({ code: aCode.trim(), nom: aNom.trim() });
+      setACode('');
+      setANom('');
+      await charger();
+      await chargerAnalytique();
+    } catch (e) {
+      traiter(e);
+    } finally {
+      setEnCours(false);
+    }
+  }
 
   function ouvrirLigneBudget(categorieId?: string, prevu?: number) {
     setBCategorie(categorieId ?? '');
@@ -212,6 +260,7 @@ export default function Tresorerie({
     setSCompte(comptes[0]?.id ?? '');
     setSCompteDest(comptes[1]?.id ?? '');
     setSCategorie('');
+    setSCentre('');
     setSLibelle('');
     setSBeneficiaire('');
     setSMontant('');
@@ -244,6 +293,7 @@ export default function Tresorerie({
         const donnees = {
           compteId: sCompte,
           categorieId: sCategorie || undefined,
+          centreCoutId: sCentre || undefined,
           libelle: sLibelle.trim(),
           beneficiaire: sBeneficiaire.trim() || undefined,
           montant: Number(sMontant),
@@ -363,6 +413,7 @@ export default function Tresorerie({
     { cle: 'vue', libelle: "Vue d'ensemble" },
     { cle: 'mouvements', libelle: 'Mouvements' },
     { cle: 'cdg', libelle: 'CDG' },
+    { cle: 'analytique', libelle: 'Analytique' },
     { cle: 'comptes', libelle: 'Comptes' },
     { cle: 'categories', libelle: 'Catégories' },
   ];
@@ -1049,6 +1100,185 @@ export default function Tresorerie({
         </>
       )}
 
+      {onglet === 'analytique' && analytique && (
+        <>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+              gap: 12,
+              marginBottom: 14,
+            }}
+          >
+            <section className="card">
+              <div className="muted" style={{ fontSize: 12, letterSpacing: 1 }}>
+                COÛT PAR PATIENT
+              </div>
+              <div style={{ fontSize: 24, fontWeight: 700 }}>
+                {XAF(analytique.totaux.coutParPatient)}
+              </div>
+              <div className="muted" style={{ fontSize: 12 }}>
+                Total dépenses / {analytique.nbPatients} patients
+              </div>
+            </section>
+            <section className="card">
+              <div className="muted" style={{ fontSize: 12, letterSpacing: 1 }}>
+                COÛT SOINS / PATIENT
+              </div>
+              <div style={{ fontSize: 24, fontWeight: 700, color: '#1d4f91' }}>
+                {XAF(analytique.totaux.coutMedicalParPatient)}
+              </div>
+              <div className="muted" style={{ fontSize: 12 }}>
+                Soins médicaux
+              </div>
+            </section>
+            <section className="card">
+              <div className="muted" style={{ fontSize: 12, letterSpacing: 1 }}>
+                COÛT ADMINISTRATIF / PATIENT
+              </div>
+              <div style={{ fontSize: 24, fontWeight: 700, color: '#e9a922' }}>
+                {XAF(analytique.totaux.coutAdminParPatient)}
+              </div>
+              <div className="muted" style={{ fontSize: 12 }}>
+                Administration
+              </div>
+            </section>
+            <section className="card">
+              <div className="muted" style={{ fontSize: 12, letterSpacing: 1 }}>
+                PATIENTS
+              </div>
+              <div style={{ fontSize: 26, fontWeight: 700, color: '#1c6b3c' }}>
+                {analytique.nbPatients}
+              </div>
+              <div className="muted" style={{ fontSize: 12 }}>
+                Dossiers enregistrés
+              </div>
+            </section>
+          </div>
+
+          <section className="card">
+            <div className="list-header">
+              <h2>Centres de coût</h2>
+            </div>
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Centre de coût</th>
+                  <th>Dépenses</th>
+                  <th>%</th>
+                  <th>Coût / patient</th>
+                  <th>Recettes</th>
+                  <th>Marge</th>
+                  <th>Écritures</th>
+                </tr>
+              </thead>
+              <tbody>
+                {analytique.lignes.map((l) => (
+                  <tr key={l.code ?? 'x'}>
+                    <td>
+                      <span
+                        className="badge-app"
+                        style={{
+                          background: '#e2ecfb',
+                          color: '#1d4f91',
+                          marginRight: 8,
+                          fontFamily: 'monospace',
+                        }}
+                      >
+                        {l.code}
+                      </span>
+                      {l.nom}
+                    </td>
+                    <td className="mono" style={{ color: '#b91c1c' }}>
+                      {XAF(l.depenses)}
+                    </td>
+                    <td className="mono">{l.part.toFixed(0)}%</td>
+                    <td className="mono">{XAF(l.coutParPatient)}</td>
+                    <td className="mono" style={{ color: '#1c6b3c' }}>
+                      {XAF(l.recettes)}
+                    </td>
+                    <td
+                      className="mono"
+                      style={{ color: l.marge >= 0 ? '#1c6b3c' : '#b91c1c' }}
+                    >
+                      {XAF(l.marge)}
+                    </td>
+                    <td className="mono muted">{l.ecritures}</td>
+                  </tr>
+                ))}
+                <tr style={{ background: '#fdf8e7' }}>
+                  <td style={{ fontStyle: 'italic' }}>Non imputé</td>
+                  <td className="mono" style={{ color: '#b91c1c' }}>
+                    {XAF(analytique.nonImpute.depenses)}
+                  </td>
+                  <td className="mono">{analytique.nonImpute.part.toFixed(0)}%</td>
+                  <td className="mono">—</td>
+                  <td className="mono" style={{ color: '#1c6b3c' }}>
+                    {XAF(analytique.nonImpute.recettes)}
+                  </td>
+                  <td
+                    className="mono"
+                    style={{
+                      color:
+                        analytique.nonImpute.marge >= 0 ? '#1c6b3c' : '#b91c1c',
+                    }}
+                  >
+                    {XAF(analytique.nonImpute.marge)}
+                  </td>
+                  <td className="mono muted">{analytique.nonImpute.ecritures}</td>
+                </tr>
+                <tr style={{ fontWeight: 700 }}>
+                  <td>Total</td>
+                  <td className="mono" style={{ color: '#b91c1c' }}>
+                    {XAF(analytique.totaux.depenses)}
+                  </td>
+                  <td className="mono">100%</td>
+                  <td className="mono">{XAF(analytique.totaux.coutParPatient)}</td>
+                  <td className="mono" style={{ color: '#1c6b3c' }}>
+                    {XAF(analytique.totaux.recettes)}
+                  </td>
+                  <td
+                    className="mono"
+                    style={{
+                      color:
+                        analytique.totaux.recettes - analytique.totaux.depenses >= 0
+                          ? '#1c6b3c'
+                          : '#b91c1c',
+                    }}
+                  >
+                    {XAF(analytique.totaux.recettes - analytique.totaux.depenses)}
+                  </td>
+                  <td className="mono">{analytique.totaux.ecritures}</td>
+                </tr>
+              </tbody>
+            </table>
+            {peutGerer && (
+              <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+                <input
+                  value={aCode}
+                  onChange={(e) => setACode(e.target.value)}
+                  placeholder="Code (RAD…)"
+                  style={{ width: 110 }}
+                />
+                <input
+                  value={aNom}
+                  onChange={(e) => setANom(e.target.value)}
+                  placeholder="Nom du centre (Radiologie…)"
+                />
+                <button
+                  type="button"
+                  className="btn-primary"
+                  disabled={enCours}
+                  onClick={validerCentre}
+                >
+                  Créer le centre
+                </button>
+              </div>
+            )}
+          </section>
+        </>
+      )}
+
       {onglet === 'comptes' && (
         <section className="card">
           <div className="list-header">
@@ -1304,12 +1534,28 @@ export default function Tresorerie({
                 />
               </div>
               {saisie !== 'transfert' && (
-                <div className="field">
-                  <label>Bénéficiaire / payeur</label>
-                  <input
-                    value={sBeneficiaire}
-                    onChange={(e) => setSBeneficiaire(e.target.value)}
-                  />
+                <div className="row">
+                  <div className="field">
+                    <label>Bénéficiaire / payeur</label>
+                    <input
+                      value={sBeneficiaire}
+                      onChange={(e) => setSBeneficiaire(e.target.value)}
+                    />
+                  </div>
+                  <div className="field">
+                    <label>Centre de coût</label>
+                    <select
+                      value={sCentre}
+                      onChange={(e) => setSCentre(e.target.value)}
+                    >
+                      <option value="">—</option>
+                      {centres.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.code} — {c.nom}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               )}
               <div className="row">
