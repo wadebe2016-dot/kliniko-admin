@@ -49,6 +49,132 @@ const MODALE = {
   padding: 16,
   overflowY: 'auto',
 } as const;
+
+// ---------------------------------------------------------------------------
+// Bulletin imprimable (meme mecanique que les ordonnances et les recus)
+// ---------------------------------------------------------------------------
+
+type CliniquePublique = {
+  nom: string;
+  ville: string | null;
+  telephone: string | null;
+};
+
+async function cliniqueDuBulletin(): Promise<CliniquePublique | null> {
+  try {
+    const res = await fetch('/api/public/cliniques');
+    if (!res.ok) return null;
+    const liste = (await res.json()) as CliniquePublique[];
+    return liste[0] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function echapper(t: string) {
+  return t
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function gabaritBulletin(
+  b: BulletinPaie,
+  clinique: CliniquePublique | null,
+): string {
+  const nomComplet = `${b.personnel.nom} ${b.personnel.prenom ?? ''}`.trim();
+  let primes: { libelle: string; montant: number }[] = [];
+  try {
+    primes = b.primesDetail ? JSON.parse(b.primesDetail) : [];
+  } catch {
+    primes = [];
+  }
+  const totalRetenues = b.cnps + b.irpp + b.cac + b.autresRetenues;
+  const ligne = (lib: string, gain: number | null, retenue: number | null) =>
+    `<tr><td>${echapper(lib)}</td><td class="m">${gain !== null ? XAF(gain) : ''}</td><td class="m">${retenue !== null ? XAF(retenue) : ''}</td></tr>`;
+
+  const lignes = [
+    ligne('Salaire de base', b.salaireBase, null),
+    ...primes.map((p) => ligne(p.libelle, p.montant, null)),
+    ligne('CNPS pension vieillesse (part salariale)', null, b.cnps),
+    ligne('Retenue IRPP', null, b.irpp),
+    ligne('CAC sur IRPP', null, b.cac),
+    ...(b.autresRetenues > 0
+      ? [ligne('Autres retenues', null, b.autresRetenues)]
+      : []),
+  ].join('');
+
+  return `<!doctype html><html lang="fr"><head><meta charset="utf-8">
+<title>Bulletin de paie ${echapper(nomComplet)} — ${MOIS_LIBELLE[b.mois - 1]} ${b.annee}</title>
+<style>
+@page { size: A4; margin: 16mm; }
+body { font-family: 'Segoe UI', Arial, sans-serif; color: #1c2733; font-size: 13px; margin: 0; }
+.entete { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 3px solid #1d4f91; padding-bottom: 10px; }
+.clinique { font-size: 17px; font-weight: 700; color: #1d4f91; }
+.muted { color: #5b6572; font-size: 12px; }
+h1 { font-size: 16px; text-align: center; margin: 16px 0 2px; letter-spacing: 1px; }
+.periode { text-align: center; color: #5b6572; margin-bottom: 14px; }
+.employe { display: flex; justify-content: space-between; background: #f4f7fa; border: 1px solid #dde4ec; border-radius: 6px; padding: 10px 14px; margin-bottom: 14px; }
+table { width: 100%; border-collapse: collapse; }
+th { text-align: left; font-size: 11px; text-transform: uppercase; color: #5b6572; border-bottom: 2px solid #1d4f91; padding: 6px 8px; }
+th.m, td.m { text-align: right; white-space: nowrap; }
+td { padding: 7px 8px; border-bottom: 1px solid #e8ecef; }
+.totaux td { font-weight: 700; border-top: 2px solid #1d4f91; border-bottom: none; }
+.net { margin-top: 14px; text-align: right; }
+.net .montant { font-size: 20px; font-weight: 800; color: #166534; }
+.versement { margin-top: 6px; text-align: right; color: #5b6572; font-size: 12px; }
+.pied { margin-top: 26px; border-top: 1px solid #dde4ec; padding-top: 8px; font-size: 11px; color: #8a94a1; text-align: center; }
+</style></head><body>
+<div class="entete">
+  <div>
+    <div class="clinique">${echapper(clinique?.nom ?? 'Kliniko')}</div>
+    <div class="muted">${echapper(clinique?.ville ?? '')}${clinique?.telephone ? ' · ' + echapper(clinique.telephone) : ''}</div>
+  </div>
+  <div class="muted" style="text-align:right">Bulletin n° ${echapper(b.id.slice(0, 8).toUpperCase())}<br>Édité le ${new Date().toLocaleDateString('fr-FR')}</div>
+</div>
+<h1>BULLETIN DE PAIE</h1>
+<div class="periode">${MOIS_LIBELLE[b.mois - 1]} ${b.annee}</div>
+<div class="employe">
+  <div><strong>${echapper(nomComplet)}</strong><br><span class="muted">${echapper(b.personnel.fonction ?? '')}</span></div>
+  <div style="text-align:right">Matricule : <strong>${echapper(b.personnel.matricule ?? '—')}</strong></div>
+</div>
+<table>
+  <thead><tr><th>Rubrique</th><th class="m">Gains</th><th class="m">Retenues</th></tr></thead>
+  <tbody>
+    ${lignes}
+    <tr class="totaux"><td>Totaux</td><td class="m">${XAF(b.brut)}</td><td class="m">${XAF(totalRetenues)}</td></tr>
+  </tbody>
+</table>
+<div class="net">Net à payer : <span class="montant">${XAF(b.net)}</span></div>
+<div class="versement">${
+    b.statutVersement === 'paye'
+      ? `Versé le ${jour(b.dateVersement)}${b.modeVersement ? ' par ' + (MODE_LIBELLE[b.modeVersement] ?? b.modeVersement).toLowerCase() : ''}`
+      : 'Versement en attente'
+  }</div>
+<div class="pied">Bulletin établi via Kliniko — outil d'aide au calcul (CNPS, IRPP, CAC), à faire valider par votre comptable.</div>
+</body></html>`;
+}
+
+// Impression par cadre invisible (les bloqueurs de fenetres ne s'y opposent pas)
+function imprimerHtml(html: string) {
+  const cadre = document.createElement('iframe');
+  cadre.style.position = 'fixed';
+  cadre.style.right = '0';
+  cadre.style.bottom = '0';
+  cadre.style.width = '0';
+  cadre.style.height = '0';
+  cadre.style.border = '0';
+  document.body.appendChild(cadre);
+  const doc = cadre.contentWindow?.document;
+  if (!doc) return;
+  doc.open();
+  doc.write(html);
+  doc.close();
+  cadre.contentWindow?.focus();
+  cadre.contentWindow?.print();
+  window.setTimeout(() => document.body.removeChild(cadre), 2000);
+}
 const CARTE_MODALE = {
   background: '#fff',
   borderRadius: 14,
@@ -86,6 +212,9 @@ export default function Paie({
   const [vDate, setVDate] = useState(new Date().toISOString().slice(0, 10));
   const [vLot, setVLot] = useState(false);
   const [aSupprimer, setASupprimer] = useState<BulletinPaie | null>(null);
+  const [apercu, setApercu] = useState<{ html: string; titre: string } | null>(
+    null,
+  );
 
   // Parametres
   const [modaleParams, setModaleParams] = useState(false);
@@ -211,6 +340,14 @@ export default function Paie({
     } finally {
       setEnCours(false);
     }
+  }
+
+  async function ouvrirApercu(b: BulletinPaie) {
+    const clinique = await cliniqueDuBulletin();
+    setApercu({
+      html: gabaritBulletin(b, clinique),
+      titre: `${b.personnel.nom} ${b.personnel.prenom ?? ''} — ${MOIS_LIBELLE[b.mois - 1]} ${b.annee}`,
+    });
   }
 
   async function confirmerSuppression() {
@@ -416,6 +553,14 @@ export default function Paie({
                     )}
                   </td>
                   <td style={{ whiteSpace: 'nowrap', textAlign: 'right' }}>
+                    <button
+                      type="button"
+                      title="Aperçu / imprimer le bulletin"
+                      style={{ background: 'none', border: 'none', cursor: 'pointer' }}
+                      onClick={() => ouvrirApercu(b)}
+                    >
+                      🖨
+                    </button>
                     {b.statutVersement === 'paye' ? (
                       <button
                         type="button"
@@ -645,6 +790,40 @@ export default function Paie({
                 {enCours ? 'Suppression…' : 'Supprimer'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {apercu && (
+        <div style={MODALE} onClick={() => setApercu(null)}>
+          <div
+            style={{ ...CARTE_MODALE, maxWidth: 720 }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+              <h3 style={{ margin: 0, flex: 1 }}>Bulletin — {apercu.titre}</h3>
+              <button type="button" onClick={() => setApercu(null)}>
+                Fermer
+              </button>
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={() => imprimerHtml(apercu.html)}
+              >
+                Imprimer
+              </button>
+            </div>
+            <iframe
+              title="Aperçu du bulletin"
+              srcDoc={apercu.html}
+              style={{
+                width: '100%',
+                height: '72vh',
+                border: '1px solid #e2e8f0',
+                borderRadius: 8,
+                background: '#fff',
+              }}
+            />
           </div>
         </div>
       )}
