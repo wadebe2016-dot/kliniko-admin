@@ -1164,3 +1164,92 @@ export async function annulerFacture(
   if (!res.ok) await echecOrdonnance(res, "Erreur lors de l'annulation de la facture");
   return res.json();
 }
+
+// ----------------------------------------------------------------------------
+// Tarifs : la mercuriale des prix (actes dates, prix des medicaments)
+// ----------------------------------------------------------------------------
+
+export type ActeTarif = {
+  id: string;
+  code: string;
+  libelle: string;
+  tarif: number | null;
+  devise: string;
+  depuis: string | null;
+};
+
+export type MedicamentPrix = {
+  id: string;
+  code: string | null;
+  denomination: string;
+  dosage: string | null;
+  forme: string | null;
+  prixVente: number | null;
+};
+
+export async function getTarifsActes(): Promise<ActeTarif[]> {
+  const res = await appelApi('/tarifs/actes');
+  if (!res.ok) await echecOrdonnance(res, 'Erreur lors du chargement des actes');
+  return res.json();
+}
+
+export async function creerActe(data: {
+  code: string;
+  libelle: string;
+  montant?: number;
+}): Promise<void> {
+  const res = await appelApi('/tarifs/actes', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) await echecOrdonnance(res, "Erreur lors de la création de l'acte");
+}
+
+export async function modifierActe(
+  acteId: string,
+  data: { libelle: string },
+): Promise<void> {
+  const res = await appelApi(`/tarifs/actes/${encodeURIComponent(acteId)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) await echecOrdonnance(res, "Erreur lors de la modification de l'acte");
+}
+
+export async function nouveauTarifActe(
+  acteId: string,
+  data: { montant: number },
+): Promise<void> {
+  const res = await appelApi(
+    `/tarifs/actes/${encodeURIComponent(acteId)}/tarif`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    },
+  );
+  if (!res.ok) await echecOrdonnance(res, 'Erreur lors du changement de tarif');
+}
+
+export async function getTarifsMedicaments(): Promise<MedicamentPrix[]> {
+  const res = await appelApi('/tarifs/medicaments');
+  if (!res.ok) await echecOrdonnance(res, 'Erreur lors du chargement des médicaments');
+  return res.json();
+}
+
+export async function modifierPrixMedicament(
+  medicamentId: string,
+  data: { prixVente: number },
+): Promise<void> {
+  const res = await appelApi(
+    `/tarifs/medicaments/${encodeURIComponent(medicamentId)}`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    },
+  );
+  if (!res.ok) await echecOrdonnance(res, 'Erreur lors du changement de prix');
+}

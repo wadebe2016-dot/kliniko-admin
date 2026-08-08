@@ -19,6 +19,7 @@ import TableauDeBord from './TableauDeBord';
 import Pharmacie from './Pharmacie';
 import Hospitalisation from './Hospitalisation';
 import Consommables from './Consommables';
+import Tarifs from './Tarifs';
 import './App.css';
 
 type Vue =
@@ -28,6 +29,7 @@ type Vue =
   | 'consultations'
   | 'ordonnances'
   | 'factures'
+  | 'tarifs'
   | 'pharmacie'
   | 'hospitalisation'
   | 'consommables'
@@ -42,6 +44,7 @@ const TITRES: Record<Vue, string> = {
   consultations: 'Consultations et dossier médical',
   ordonnances: 'Ordonnances et prescriptions',
   factures: 'Facturation et caisse',
+  tarifs: 'Tarifs et mercuriale',
   pharmacie: 'Pharmacie et stock',
   hospitalisation: 'Chambres et hospitalisation',
   consommables: 'Consommables',
@@ -71,7 +74,10 @@ const GROUPES: {
   },
   {
     libelle: 'Finances',
-    entrees: [{ vue: 'factures', libelle: 'Facturation', perm: 'facture.lire' }],
+    entrees: [
+      { vue: 'factures', libelle: 'Facturation', perm: 'facture.lire' },
+      { vue: 'tarifs', libelle: 'Tarifs', perm: 'tarif.lire' },
+    ],
   },
   {
     libelle: 'Ressources',
@@ -309,6 +315,8 @@ function App() {
             <Hospitalisation onSessionExpiree={() => setUtilisateur(null)} />
           ) : vue === 'consommables' ? (
             <Consommables onSessionExpiree={() => setUtilisateur(null)} />
+          ) : vue === 'tarifs' ? (
+            <Tarifs onSessionExpiree={() => setUtilisateur(null)} />
           ) : vue === 'consultations' ? (
             <Consultations onSessionExpiree={() => setUtilisateur(null)} />
           ) : vue === 'utilisateurs' ? (
