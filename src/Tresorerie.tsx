@@ -9,10 +9,14 @@ import {
   creerDepense,
   creerTransfert,
   supprimerMouvement,
+  getBudget,
+  definirLigneBudget,
+  supprimerLigneBudget,
   aPermission,
   type CompteTresorerie,
   type CategorieTresorerie,
   type MouvementTresorerie,
+  type BudgetResume,
 } from './api';
 
 const XAF = (n: number) => n.toLocaleString('fr-FR') + ' FCFA';
@@ -25,7 +29,7 @@ const TYPE_COMPTE_LIBELLE: Record<CompteTresorerie['type'], string> = {
   mobile_money: 'Mobile Money',
 };
 
-type Onglet = 'vue' | 'mouvements' | 'comptes' | 'categories';
+type Onglet = 'vue' | 'mouvements' | 'cdg' | 'comptes' | 'categories';
 type Saisie = 'recette' | 'depense' | 'transfert';
 
 export default function Tresorerie({
@@ -59,6 +63,14 @@ export default function Tresorerie({
   const [sMontant, setSMontant] = useState('');
   const [sDate, setSDate] = useState(iso(new Date()));
   const [sErreur, setSErreur] = useState<string | null>(null);
+
+  // Controle de gestion
+  const [annee, setAnnee] = useState(new Date().getFullYear());
+  const [budget, setBudget] = useState<BudgetResume | null>(null);
+  const [bModale, setBModale] = useState(false);
+  const [bCategorie, setBCategorie] = useState('');
+  const [bMontant, setBMontant] = useState('');
+  const [bErreur, setBErreur] = useState<string | null>(null);
 
   // Nouveaux compte / categorie
   const [cNom, setCNom] = useState('');
@@ -99,6 +111,66 @@ export default function Tresorerie({
   useEffect(() => {
     charger();
   }, [charger]);
+
+  const chargerBudget = useCallback(async () => {
+    try {
+      setBudget(await getBudget(annee));
+    } catch (e) {
+      traiter(e);
+    }
+  }, [annee, traiter]);
+
+  useEffect(() => {
+    if (onglet === 'cdg') chargerBudget();
+  }, [onglet, chargerBudget]);
+
+  function ouvrirLigneBudget(categorieId?: string, prevu?: number) {
+    setBCategorie(categorieId ?? '');
+    setBMontant(prevu !== undefined ? String(prevu) : '');
+    setBErreur(null);
+    setBModale(true);
+  }
+
+  async function validerLigneBudget() {
+    if (!bCategorie) {
+      setBErreur('Choisissez une catégorie');
+      return;
+    }
+    if (bMontant === '' || Number(bMontant) < 0) {
+      setBErreur('Indiquez le montant prévu');
+      return;
+    }
+    setEnCours(true);
+    setBErreur(null);
+    try {
+      await definirLigneBudget({
+        annee,
+        categorieId: bCategorie,
+        montantPrevu: Number(bMontant),
+      });
+      setBModale(false);
+      await chargerBudget();
+    } catch (e) {
+      const m = (e as Error).message;
+      if (m.includes('reconnecter')) onSessionExpiree();
+      else setBErreur(m);
+    } finally {
+      setEnCours(false);
+    }
+  }
+
+  async function retirerLigneBudget(id: string) {
+    if (!window.confirm('Retirer cette ligne de budget ?')) return;
+    setEnCours(true);
+    try {
+      await supprimerLigneBudget(id);
+      await chargerBudget();
+    } catch (e) {
+      traiter(e);
+    } finally {
+      setEnCours(false);
+    }
+  }
 
   function raccourci(quoi: 'mois' | 'dernier' | 'trois') {
     const now = new Date();
@@ -240,9 +312,39 @@ export default function Tresorerie({
   const ONGLETS: { cle: Onglet; libelle: string }[] = [
     { cle: 'vue', libelle: "Vue d'ensemble" },
     { cle: 'mouvements', libelle: 'Mouvements' },
+    { cle: 'cdg', libelle: 'CDG' },
     { cle: 'comptes', libelle: 'Comptes' },
     { cle: 'categories', libelle: 'Catégories' },
   ];
+
+  const barre = (pct: number, depasse: boolean) => (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <div
+        style={{
+          width: 90,
+          height: 8,
+          borderRadius: 4,
+          background: '#e8ecef',
+          overflow: 'hidden',
+          flex: 'none',
+        }}
+      >
+        <div
+          style={{
+            width: `${Math.min(100, pct)}%`,
+            height: '100%',
+            background: depasse ? '#b91c1c' : pct >= 80 ? '#e9a922' : '#1d4f91',
+          }}
+        />
+      </div>
+      <span
+        className="mono"
+        style={{ fontSize: 12, color: depasse ? '#b91c1c' : undefined }}
+      >
+        {pct.toFixed(pct >= 100 ? 0 : 1)}%
+      </span>
+    </div>
+  );
 
   return (
     <>
@@ -476,6 +578,216 @@ export default function Tresorerie({
         </>
       )}
 
+      {onglet === 'cdg' && (
+        <>
+          <section className="card" style={{ marginBottom: 12 }}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+              <div className="field" style={{ margin: 0 }}>
+                <label>Année</label>
+                <select
+                  value={annee}
+                  onChange={(e) => setAnnee(Number(e.target.value))}
+                >
+                  {[0, 1, 2].map((n) => {
+                    const a = new Date().getFullYear() - n;
+                    return (
+                      <option key={a} value={a}>
+                        {a}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+              {peutGerer && (
+                <button
+                  type="button"
+                  className="btn-primary"
+                  onClick={() => ouvrirLigneBudget()}
+                >
+                  + Nouvelle ligne de budget
+                </button>
+              )}
+            </div>
+          </section>
+
+          {budget && (
+            <>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))',
+                  gap: 12,
+                  marginBottom: 14,
+                }}
+              >
+                <section className="card">
+                  <div className="muted" style={{ fontSize: 12, letterSpacing: 1 }}>
+                    RECETTES (RÉALISÉ / PRÉVU)
+                  </div>
+                  <div style={{ fontSize: 19, fontWeight: 700 }}>
+                    <span style={{ color: '#1c6b3c' }}>
+                      {XAF(budget.totaux.recettesRealise)}
+                    </span>{' '}
+                    <span className="muted" style={{ fontWeight: 400 }}>
+                      / {XAF(budget.totaux.recettesPrevu)}
+                    </span>
+                  </div>
+                  <div className="muted" style={{ fontSize: 12 }}>
+                    Réalisation : {budget.totaux.realisation.toFixed(0)} %
+                  </div>
+                </section>
+                <section className="card">
+                  <div className="muted" style={{ fontSize: 12, letterSpacing: 1 }}>
+                    DÉPENSES (RÉALISÉ / PRÉVU)
+                  </div>
+                  <div style={{ fontSize: 19, fontWeight: 700 }}>
+                    <span style={{ color: '#b91c1c' }}>
+                      {XAF(budget.totaux.depensesRealise)}
+                    </span>{' '}
+                    <span className="muted" style={{ fontWeight: 400 }}>
+                      / {XAF(budget.totaux.depensesPrevu)}
+                    </span>
+                  </div>
+                  <div className="muted" style={{ fontSize: 12 }}>
+                    Exécution : {budget.totaux.execution.toFixed(0)} %
+                  </div>
+                </section>
+                <section className="card">
+                  <div className="muted" style={{ fontSize: 12, letterSpacing: 1 }}>
+                    MARGE BUDGÉTAIRE
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 22,
+                      fontWeight: 700,
+                      color: budget.totaux.marge >= 0 ? '#1c6b3c' : '#b91c1c',
+                    }}
+                  >
+                    {XAF(budget.totaux.marge)}
+                  </div>
+                  <div className="muted" style={{ fontSize: 12 }}>
+                    Recettes − dépenses réalisées
+                  </div>
+                </section>
+                <section className="card">
+                  <div className="muted" style={{ fontSize: 12, letterSpacing: 1 }}>
+                    POSTES EN DÉPASSEMENT
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 26,
+                      fontWeight: 700,
+                      color: budget.totaux.depassements > 0 ? '#b91c1c' : undefined,
+                    }}
+                  >
+                    {budget.totaux.depassements}
+                  </div>
+                  <div className="muted" style={{ fontSize: 12 }}>
+                    Réalisé supérieur au budget
+                  </div>
+                </section>
+              </div>
+
+              <section className="card">
+                <div className="list-header">
+                  <h2>Budget {budget.annee}</h2>
+                </div>
+                {budget.lignes.length === 0 && (
+                  <p className="muted">
+                    Aucune ligne de budget pour {budget.annee}. Créez-en avec le
+                    bouton ci-dessus.
+                  </p>
+                )}
+                {budget.lignes.length > 0 && (
+                  <table className="table">
+                    <thead>
+                      <tr>
+                        <th>Poste</th>
+                        <th>Prévu</th>
+                        <th>Réalisé</th>
+                        <th>Écart</th>
+                        <th>Consommé</th>
+                        {peutGerer && <th></th>}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {budget.lignes.map((l, i) => {
+                        const depasse =
+                          l.categorie.sens === 'depense' && l.realise > l.prevu;
+                        const entete =
+                          i === 0 ||
+                          budget.lignes[i - 1].categorie.sens !== l.categorie.sens;
+                        return (
+                          <>
+                            {entete && (
+                              <tr key={`${l.categorie.sens}-tete`}>
+                                <td
+                                  colSpan={peutGerer ? 6 : 5}
+                                  style={{
+                                    background:
+                                      l.categorie.sens === 'recette'
+                                        ? '#e6f4ec'
+                                        : '#fdece7',
+                                    fontWeight: 700,
+                                    fontSize: 12,
+                                    letterSpacing: 1,
+                                  }}
+                                >
+                                  {l.categorie.sens === 'recette'
+                                    ? 'RECETTES'
+                                    : 'DÉPENSES'}
+                                </td>
+                              </tr>
+                            )}
+                            <tr key={l.categorie.id}>
+                              <td>{l.categorie.nom}</td>
+                              <td className="mono">{XAF(l.prevu)}</td>
+                              <td className="mono">{XAF(l.realise)}</td>
+                              <td
+                                className="mono"
+                                style={{
+                                  color: l.ecart < 0 ? '#b91c1c' : undefined,
+                                }}
+                              >
+                                {XAF(l.ecart)}
+                              </td>
+                              <td>{barre(l.consomme, depasse)}</td>
+                              {peutGerer && (
+                                <td>
+                                  <button
+                                    type="button"
+                                    style={{ padding: '2px 8px', cursor: 'pointer' }}
+                                    onClick={() =>
+                                      ouvrirLigneBudget(l.categorie.id, l.prevu)
+                                    }
+                                  >
+                                    Modifier
+                                  </button>{' '}
+                                  {l.id && (
+                                    <button
+                                      type="button"
+                                      style={{ padding: '2px 8px', cursor: 'pointer' }}
+                                      disabled={enCours}
+                                      onClick={() => retirerLigneBudget(l.id as string)}
+                                    >
+                                      Retirer
+                                    </button>
+                                  )}
+                                </td>
+                              )}
+                            </tr>
+                          </>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
+              </section>
+            </>
+          )}
+        </>
+      )}
+
       {onglet === 'comptes' && (
         <section className="card">
           <div className="list-header">
@@ -586,6 +898,68 @@ export default function Tresorerie({
             </div>
           )}
         </section>
+      )}
+
+      {bModale && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(12, 42, 40, 0.45)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 50,
+          }}
+          onClick={() => !enCours && setBModale(false)}
+        >
+          <div
+            className="card"
+            style={{ width: 'min(420px, 92vw)' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2>Ligne de budget {annee}</h2>
+            <div className="form">
+              <div className="field">
+                <label>Catégorie</label>
+                <select
+                  value={bCategorie}
+                  onChange={(e) => setBCategorie(e.target.value)}
+                >
+                  <option value="">Choisir…</option>
+                  {categories.map((g) => (
+                    <option key={g.id} value={g.id}>
+                      {g.nom} ({g.sens === 'recette' ? 'recette' : 'dépense'})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="field">
+                <label>Montant prévu pour l'année (FCFA)</label>
+                <input
+                  type="number"
+                  min={0}
+                  value={bMontant}
+                  onChange={(e) => setBMontant(e.target.value)}
+                />
+              </div>
+              {bErreur && <p className="error">{bErreur}</p>}
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                <button type="button" disabled={enCours} onClick={() => setBModale(false)}>
+                  Annuler
+                </button>
+                <button
+                  type="button"
+                  className="btn-primary"
+                  disabled={enCours}
+                  onClick={validerLigneBudget}
+                >
+                  {enCours ? 'Enregistrement…' : 'Enregistrer'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {saisie && (

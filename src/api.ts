@@ -1629,3 +1629,58 @@ export async function supprimerMouvement(mouvementId: string): Promise<void> {
   );
   if (!res.ok) await echecOrdonnance(res, 'Erreur lors de la suppression');
 }
+
+// ----------------------------------------------------------------------------
+// Controle de gestion : budget annuel par categorie
+// ----------------------------------------------------------------------------
+
+export type LigneBudgetResume = {
+  id: string | null;
+  categorie: { id: string; nom: string; sens: 'recette' | 'depense' };
+  prevu: number;
+  realise: number;
+  ecart: number;
+  consomme: number;
+};
+
+export type BudgetResume = {
+  annee: number;
+  lignes: LigneBudgetResume[];
+  totaux: {
+    recettesPrevu: number;
+    recettesRealise: number;
+    depensesPrevu: number;
+    depensesRealise: number;
+    execution: number;
+    realisation: number;
+    marge: number;
+    depassements: number;
+  };
+};
+
+export async function getBudget(annee: number): Promise<BudgetResume> {
+  const res = await appelApi(`/tresorerie/budget?annee=${annee}`);
+  if (!res.ok) await echecOrdonnance(res, 'Erreur lors du chargement du budget');
+  return res.json();
+}
+
+export async function definirLigneBudget(data: {
+  annee: number;
+  categorieId: string;
+  montantPrevu: number;
+}): Promise<void> {
+  const res = await appelApi('/tresorerie/budget', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) await echecOrdonnance(res, "Erreur lors de l'enregistrement du budget");
+}
+
+export async function supprimerLigneBudget(ligneId: string): Promise<void> {
+  const res = await appelApi(
+    `/tresorerie/budget/${encodeURIComponent(ligneId)}`,
+    { method: 'DELETE' },
+  );
+  if (!res.ok) await echecOrdonnance(res, 'Erreur lors de la suppression de la ligne');
+}
