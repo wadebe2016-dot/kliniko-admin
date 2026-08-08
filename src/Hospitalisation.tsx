@@ -62,12 +62,20 @@ export default function Hospitalisation({
   // Chambres cochees dans le plan (actions Modifier / Supprimer)
   const [cochees, setCochees] = useState<string[]>([]);
 
-  // Nouvelle chambre / modification
-  const [cEdition, setCEdition] = useState<string | null>(null);
+  // Nouvelle chambre (creation uniquement, la modification passe par la modale)
   const [cNumero, setCNumero] = useState('');
   const [cCategorie, setCCategorie] = useState('');
   const [cTarif, setCTarif] = useState('');
   const [cNbLits, setCNbLits] = useState(2);
+
+  // Modale (modification ou suppression)
+  const [modale, setModale] = useState<'modifier' | 'supprimer' | null>(null);
+  const [mChambre, setMChambre] = useState<ChambreOccupation | null>(null);
+  const [mNumero, setMNumero] = useState('');
+  const [mCategorie, setMCategorie] = useState('');
+  const [mTarif, setMTarif] = useState('');
+  const [mNbLits, setMNbLits] = useState(2);
+  const [mErreur, setMErreur] = useState<string | null>(null);
 
   const peutGerer = aPermission('hospitalisation.gerer');
 
@@ -144,24 +152,6 @@ export default function Hospitalisation({
     }
   }
 
-  function viderFormChambre() {
-    setCEdition(null);
-    setCNumero('');
-    setCCategorie('');
-    setCTarif('');
-    setCNbLits(2);
-  }
-
-  function editerChambre(c: ChambreOccupation) {
-    setCEdition(c.id);
-    setCNumero(c.numero);
-    setCCategorie(c.categorie ?? '');
-    setCTarif(c.tarifJournalier !== null ? String(c.tarifJournalier) : '');
-    setCNbLits(c.lits.length);
-    setInfo(null);
-    setErreur(null);
-  }
-
   async function validerChambre() {
     if (!cNumero.trim()) {
       setErreur('Indiquez le numéro de la chambre');
@@ -171,24 +161,17 @@ export default function Hospitalisation({
     setErreur(null);
     setInfo(null);
     try {
-      if (cEdition) {
-        await modifierChambre(cEdition, {
-          numero: cNumero.trim(),
-          categorie: cCategorie.trim(),
-          tarifJournalier: cTarif ? Number(cTarif) : undefined,
-          nbLits: cNbLits,
-        });
-        setInfo('Chambre modifiée.');
-      } else {
-        await creerChambre({
-          numero: cNumero.trim(),
-          categorie: cCategorie.trim() || undefined,
-          tarifJournalier: cTarif ? Number(cTarif) : undefined,
-          nbLits: cNbLits,
-        });
-        setInfo('Chambre créée.');
-      }
-      viderFormChambre();
+      await creerChambre({
+        numero: cNumero.trim(),
+        categorie: cCategorie.trim() || undefined,
+        tarifJournalier: cTarif ? Number(cTarif) : undefined,
+        nbLits: cNbLits,
+      });
+      setInfo('Chambre créée.');
+      setCNumero('');
+      setCCategorie('');
+      setCTarif('');
+      setCNbLits(2);
       await charger();
     } catch (e) {
       traiter(e);
@@ -203,31 +186,74 @@ export default function Hospitalisation({
     );
   }
 
-  function modifierCochee() {
-    const c = chambres.find((x) => x.id === cochees[0]);
-    if (c) editerChambre(c);
+  function ouvrirModificationPour(c: ChambreOccupation) {
+    setMChambre(c);
+    setMNumero(c.numero);
+    setMCategorie(c.categorie ?? '');
+    setMTarif(c.tarifJournalier !== null ? String(c.tarifJournalier) : '');
+    setMNbLits(c.lits.length);
+    setMErreur(null);
+    setModale('modifier');
   }
 
-  async function supprimerCochees() {
+  function ouvrirModification() {
+    const c = chambres.find((x) => x.id === cochees[0]);
+    if (c) ouvrirModificationPour(c);
+  }
+
+  function ouvrirSuppression() {
+    if (cochees.length === 0) return;
+    setMErreur(null);
+    setModale('supprimer');
+  }
+
+  function fermerModale() {
+    setModale(null);
+    setMChambre(null);
+    setMErreur(null);
+  }
+
+  async function validerModification() {
+    if (!mChambre) return;
+    if (!mNumero.trim()) {
+      setMErreur('Indiquez le numéro de la chambre');
+      return;
+    }
+    setEnCours(true);
+    setMErreur(null);
+    try {
+      await modifierChambre(mChambre.id, {
+        numero: mNumero.trim(),
+        categorie: mCategorie.trim(),
+        tarifJournalier: mTarif ? Number(mTarif) : undefined,
+        nbLits: mNbLits,
+      });
+      fermerModale();
+      setCochees([]);
+      setInfo('Chambre modifiée.');
+      setErreur(null);
+      await charger();
+    } catch (e) {
+      const m = (e as Error).message;
+      if (m.includes('reconnecter')) onSessionExpiree();
+      else setMErreur(m);
+    } finally {
+      setEnCours(false);
+    }
+  }
+
+  async function confirmerSuppression() {
     const cibles = chambres.filter((c) => cochees.includes(c.id));
     if (cibles.length === 0) return;
-    const noms = cibles.map((c) => c.numero).join(', ');
-    if (
-      !window.confirm(
-        `Supprimer ${cibles.length > 1 ? 'les chambres' : 'la chambre'} ${noms} ?`,
-      )
-    )
-      return;
     setEnCours(true);
-    setErreur(null);
-    setInfo(null);
+    setMErreur(null);
     const refus: string[] = [];
+    const restantes: string[] = [];
     let supprimees = 0;
     for (const c of cibles) {
       try {
         await supprimerChambre(c.id);
         supprimees += 1;
-        if (cEdition === c.id) viderFormChambre();
       } catch (e) {
         const m = (e as Error).message;
         if (m.includes('reconnecter')) {
@@ -235,19 +261,24 @@ export default function Hospitalisation({
           return;
         }
         refus.push(m);
+        restantes.push(c.id);
       }
     }
-    setCochees([]);
-    if (refus.length > 0) setErreur(refus.join(' — '));
-    if (supprimees > 0) {
+    setCochees(restantes);
+    await charger();
+    setEnCours(false);
+    if (refus.length > 0) {
+      // On laisse la modale ouverte : elle montre ce qui a ete refuse
+      setMErreur(refus.join(' — '));
+    } else {
+      fermerModale();
       setInfo(
         supprimees > 1
           ? `${supprimees} chambres supprimées.`
           : 'Chambre supprimée.',
       );
+      setErreur(null);
     }
-    await charger();
-    setEnCours(false);
   }
 
   async function sortie(s: Sejour, facturer: boolean) {
@@ -363,9 +394,7 @@ export default function Hospitalisation({
               Admettre
             </button>
 
-            <h2 style={{ marginTop: 18 }}>
-              {cEdition ? 'Modifier la chambre' : 'Nouvelle chambre'}
-            </h2>
+            <h2 style={{ marginTop: 18 }}>Nouvelle chambre</h2>
             <div className="row">
               <div className="field">
                 <label>Numéro</label>
@@ -410,13 +439,8 @@ export default function Hospitalisation({
               disabled={enCours}
               onClick={validerChambre}
             >
-              {cEdition ? 'Enregistrer la chambre' : 'Créer la chambre'}
+              Créer la chambre
             </button>
-            {cEdition && (
-              <button type="button" disabled={enCours} onClick={viderFormChambre}>
-                Annuler la modification
-              </button>
-            )}
             {erreur && <p className="error">{erreur}</p>}
             {info && <p className="muted">{info}</p>}
           </div>
@@ -439,14 +463,14 @@ export default function Hospitalisation({
                     ? 'Cochez une seule chambre pour la modifier'
                     : ''
                 }
-                onClick={modifierCochee}
+                onClick={ouvrirModification}
               >
                 Modifier
               </button>{' '}
               <button
                 type="button"
                 disabled={enCours}
-                onClick={supprimerCochees}
+                onClick={ouvrirSuppression}
               >
                 Supprimer{cochees.length > 1 ? ` (${cochees.length})` : ''}
               </button>
@@ -467,7 +491,11 @@ export default function Hospitalisation({
                 display: 'flex',
                 alignItems: 'center',
                 gap: 8,
+                cursor: peutGerer ? 'pointer' : 'default',
+                userSelect: 'none',
               }}
+              title={peutGerer ? 'Double-clic pour modifier' : ''}
+              onDoubleClick={() => peutGerer && ouvrirModificationPour(c)}
             >
               {peutGerer && (
                 <input
@@ -593,6 +621,147 @@ export default function Hospitalisation({
           </table>
         )}
       </section>
+
+      {modale && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(12, 42, 40, 0.45)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 50,
+          }}
+          onClick={() => !enCours && fermerModale()}
+        >
+          <div
+            className="card"
+            style={{ width: 'min(480px, 92vw)', maxHeight: '85vh', overflow: 'auto' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {modale === 'modifier' && mChambre && (
+              <>
+                <h2>Modifier la chambre {mChambre.numero}</h2>
+                <div className="form">
+                  <div className="row">
+                    <div className="field">
+                      <label>Numéro</label>
+                      <input
+                        value={mNumero}
+                        onChange={(e) => setMNumero(e.target.value)}
+                      />
+                    </div>
+                    <div className="field">
+                      <label>Catégorie</label>
+                      <input
+                        value={mCategorie}
+                        onChange={(e) => setMCategorie(e.target.value)}
+                        placeholder="Standard, Privée, VIP…"
+                      />
+                    </div>
+                  </div>
+                  <div className="row">
+                    <div className="field">
+                      <label>Tarif / jour (XAF)</label>
+                      <input
+                        type="number"
+                        min={0}
+                        value={mTarif}
+                        onChange={(e) => setMTarif(e.target.value)}
+                      />
+                    </div>
+                    <div className="field">
+                      <label>Nombre de lits</label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={20}
+                        value={mNbLits}
+                        onChange={(e) => setMNbLits(Number(e.target.value))}
+                      />
+                    </div>
+                  </div>
+                  <p className="muted">
+                    Augmenter le nombre de lits en crée ; le diminuer ne retire
+                    que des lits jamais utilisés.
+                  </p>
+                  {mErreur && <p className="error">{mErreur}</p>}
+                  <div
+                    style={{
+                      display: 'flex',
+                      gap: 8,
+                      justifyContent: 'flex-end',
+                    }}
+                  >
+                    <button
+                      type="button"
+                      disabled={enCours}
+                      onClick={fermerModale}
+                    >
+                      Annuler
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-primary"
+                      disabled={enCours}
+                      onClick={validerModification}
+                    >
+                      {enCours ? 'Enregistrement…' : 'Enregistrer'}
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+            {modale === 'supprimer' && (
+              <>
+                <h2>
+                  Supprimer{' '}
+                  {cochees.length > 1
+                    ? `${cochees.length} chambres`
+                    : 'la chambre'}
+                </h2>
+                <p style={{ margin: '10px 0 6px' }}>
+                  {chambres
+                    .filter((c) => cochees.includes(c.id))
+                    .map((c) => `Chambre ${c.numero}`)
+                    .join(', ')}
+                </p>
+                <p className="muted">
+                  Une chambre dont les lits ont déjà accueilli un séjour, même
+                  terminé, sera refusée : l'historique est conservé.
+                </p>
+                {mErreur && <p className="error">{mErreur}</p>}
+                <div
+                  style={{
+                    display: 'flex',
+                    gap: 8,
+                    justifyContent: 'flex-end',
+                    marginTop: 12,
+                  }}
+                >
+                  <button
+                    type="button"
+                    disabled={enCours}
+                    onClick={fermerModale}
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-primary"
+                    style={{ background: '#b91c1c' }}
+                    disabled={enCours || cochees.length === 0}
+                    onClick={confirmerSuppression}
+                  >
+                    {enCours ? 'Suppression…' : 'Supprimer'}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </>
   );
 }
