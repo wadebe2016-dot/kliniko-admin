@@ -21,6 +21,45 @@ const fmtDate = (iso: string) =>
     minute: '2-digit',
   });
 
+const fmtMontant = (n: string | number) => Number(n).toLocaleString('fr-FR');
+
+const PAIEMENT_LIBELLE: Record<string, string> = {
+  momo: 'Mobile Money',
+  especes: 'Espèces à la caisse',
+};
+
+// L'etat caisse d'un rendez-vous pris en ligne : deduit de sa facture.
+// C'est lui qui autorise (ou non) le passage en pre-consultation.
+function etatCaisse(r: RendezVous): {
+  pret: boolean;
+  texte: string;
+  fond: string;
+} | null {
+  if (r.facture && r.facture.statut !== 'annulee') {
+    if (r.facture.statut === 'reglee') {
+      return {
+        pret: true,
+        texte: `✓ Payé (${r.facture.numero}) — prêt pour la pré-consultation`,
+        fond: '#c5e8d2',
+      };
+    }
+    const paye = Number(r.facture.montantPaye);
+    return {
+      pret: false,
+      texte: `En attente caisse — ${r.facture.numero} : ${fmtMontant(paye)} / ${fmtMontant(r.facture.montantTotal)} XAF réglés`,
+      fond: '#f6e7c9',
+    };
+  }
+  if (r.montantPrevu != null) {
+    return {
+      pret: false,
+      texte: 'Facture non générée — confirmez le rendez-vous dans l’Agenda',
+      fond: '#f8d9dc',
+    };
+  }
+  return null;
+}
+
 type Props = {
   onSessionExpiree: () => void;
 };
@@ -92,6 +131,11 @@ function Consultations({ onSessionExpiree }: Props) {
       r.patientId === patientId &&
       (r.statut === 'planifie' || r.statut === 'confirme'),
   );
+
+  // Le rendez-vous lie choisi : s'il vient de l'application patient, son
+  // bandeau de pre-consultation s'affiche pour l'infirmiere.
+  const rdvChoisi = rdvsDuPatient.find((r) => r.id === rendezVousId) ?? null;
+  const caisseRdv = rdvChoisi ? etatCaisse(rdvChoisi) : null;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -196,16 +240,88 @@ function Consultations({ onSessionExpiree }: Props) {
                 <label>Rendez-vous lié (passera en « honoré »)</label>
                 <select
                   value={rendezVousId}
-                  onChange={(e) => setRendezVousId(e.target.value)}
+                  onChange={(e) => {
+                    setRendezVousId(e.target.value);
+                    // Le motif de la demande en ligne pre-remplit le champ
+                    const r = rdvsDuPatient.find(
+                      (x) => x.id === e.target.value,
+                    );
+                    if (r?.motif && !motif) setMotif(r.motif);
+                  }}
                 >
                   <option value="">Aucun (consultation directe)</option>
                   {rdvsDuPatient.map((r) => (
                     <option key={r.id} value={r.id}>
                       {fmtDate(r.debut)}
+                      {r.acte ? ` — ${r.acte.libelle}` : ''}
                       {r.motif ? ` — ${r.motif}` : ''}
+                      {r.origine === 'patient' ? ' (App)' : ''}
                     </option>
                   ))}
                 </select>
+              </div>
+            )}
+
+            {/* Bandeau de pre-consultation : tout ce que l'infirmiere doit
+                savoir avant de prendre les parametres. L'etat "pret" est
+                deduit de la facture liee, jamais coche a la main. */}
+            {rdvChoisi && (rdvChoisi.acte || rdvChoisi.montantPrevu != null) && (
+              <div
+                style={{
+                  border: '1px solid #d7dee6',
+                  borderLeft: `4px solid ${caisseRdv?.pret ? '#2E7D5B' : '#B7791F'}`,
+                  borderRadius: 8,
+                  padding: '10px 14px',
+                  marginBottom: 12,
+                  background: '#fafcfc',
+                }}
+              >
+                <div style={{ fontWeight: 600, marginBottom: 4 }}>
+                  Pré-consultation — demande en ligne
+                </div>
+                <div style={{ fontSize: '0.9em', lineHeight: 1.7 }}>
+                  <div>
+                    <strong>Patient :</strong> {rdvChoisi.patient.nom}{' '}
+                    {rdvChoisi.patient.prenom ?? ''}{' '}
+                    <span className="muted">
+                      ({rdvChoisi.patient.numeroDossier})
+                    </span>
+                  </div>
+                  {rdvChoisi.acte && (
+                    <div>
+                      <strong>Prestation :</strong> {rdvChoisi.acte.libelle}
+                      {rdvChoisi.montantPrevu != null &&
+                        ` — ${fmtMontant(rdvChoisi.montantPrevu)} XAF`}
+                    </div>
+                  )}
+                  {rdvChoisi.modePaiement && (
+                    <div>
+                      <strong>Règlement prévu :</strong>{' '}
+                      {PAIEMENT_LIBELLE[rdvChoisi.modePaiement]}
+                    </div>
+                  )}
+                  {rdvChoisi.assurance && (
+                    <div>
+                      <strong>Prise en charge :</strong>{' '}
+                      {rdvChoisi.assurance.nom} — vérifier la carte à
+                      l'accueil
+                    </div>
+                  )}
+                  {caisseRdv && (
+                    <div style={{ marginTop: 6 }}>
+                      <span
+                        style={{
+                          background: caisseRdv.fond,
+                          borderRadius: 10,
+                          padding: '3px 12px',
+                          fontSize: '0.95em',
+                        }}
+                      >
+                        {caisseRdv.texte}
+                      </span>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
             <div className="field">

@@ -31,6 +31,38 @@ const STATUT_FOND: Record<StatutRdv, string> = {
 
 type Creneau = { debut: string; fin: string; heure: string };
 
+const fmtMontant = (n: string | number) => Number(n).toLocaleString('fr-FR');
+
+const PAIEMENT_COURT: Record<string, string> = {
+  momo: 'Mobile Money',
+  especes: 'Espèces',
+};
+
+// L'etat caisse d'un rendez-vous pris en ligne : deduit de sa facture,
+// jamais stocke. Regle -> pret pour la pre-consultation.
+function etatCaisse(
+  r: RendezVous,
+): { texte: string; fond: string } | null {
+  if (r.facture && r.facture.statut !== 'annulee') {
+    if (r.facture.statut === 'reglee') {
+      return { texte: '✓ Payé — prêt', fond: '#c5e8d2' };
+    }
+    const paye = Number(r.facture.montantPaye);
+    return {
+      texte:
+        paye > 0
+          ? `En attente caisse (${fmtMontant(paye)} / ${fmtMontant(r.facture.montantTotal)})`
+          : 'En attente caisse',
+      fond: '#f6e7c9',
+    };
+  }
+  // Prestation choisie mais facture pas encore generee (demande non confirmee)
+  if (r.montantPrevu != null) {
+    return { texte: 'Facture à la confirmation', fond: '#e2ecfb' };
+  }
+  return null;
+}
+
 type Props = {
   onSessionExpiree: () => void;
 };
@@ -320,6 +352,7 @@ function Agenda({ onSessionExpiree }: Props) {
                 <th>Date</th>
                 <th>Patient</th>
                 <th>Motif</th>
+                <th>Prestation / Caisse</th>
                 <th>Statut</th>
                 <th>Actions</th>
               </tr>
@@ -331,8 +364,64 @@ function Agenda({ onSessionExpiree }: Props) {
                   <td>
                     {r.patient.nom} {r.patient.prenom ?? ''}
                     <span className="muted"> ({r.patient.numeroDossier})</span>
+                    {r.origine === 'patient' && (
+                      <span
+                        style={{
+                          marginLeft: 6,
+                          background: '#0f766e',
+                          color: '#fff',
+                          borderRadius: 10,
+                          padding: '1px 8px',
+                          fontSize: '0.75em',
+                          fontWeight: 600,
+                        }}
+                      >
+                        App
+                      </span>
+                    )}
                   </td>
                   <td>{r.motif || '—'}</td>
+                  <td>
+                    {r.acte ? (
+                      <>
+                        {r.acte.libelle}
+                        {r.montantPrevu != null && (
+                          <span className="muted">
+                            {' '}
+                            · {fmtMontant(r.montantPrevu)} XAF
+                          </span>
+                        )}
+                        {r.modePaiement && (
+                          <span className="muted">
+                            {' '}
+                            · {PAIEMENT_COURT[r.modePaiement]}
+                          </span>
+                        )}
+                        {r.assurance && (
+                          <span className="muted"> · {r.assurance.nom}</span>
+                        )}
+                        {(() => {
+                          const caisse = etatCaisse(r);
+                          return caisse ? (
+                            <div style={{ marginTop: 3 }}>
+                              <span
+                                style={{
+                                  background: caisse.fond,
+                                  borderRadius: 10,
+                                  padding: '2px 10px',
+                                  fontSize: '0.8em',
+                                }}
+                              >
+                                {caisse.texte}
+                              </span>
+                            </div>
+                          ) : null;
+                        })()}
+                      </>
+                    ) : (
+                      '—'
+                    )}
+                  </td>
                   <td>
                     <span
                       style={{
