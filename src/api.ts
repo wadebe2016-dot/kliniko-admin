@@ -1521,6 +1521,8 @@ export type FicheRh = MembrePersonnel & {
   adresse: string | null;
   cni: string | null;
   numeroCnps: string | null;
+  niu: string | null;
+  situationFamille: string | null;
   typeContrat: string | null;
   dateEmbauche: string | null;
   dateFinContrat: string | null;
@@ -1588,6 +1590,8 @@ export async function modifierFicheRh(
     adresse?: string;
     cni?: string;
     numeroCnps?: string;
+    niu?: string;
+    situationFamille?: string;
     typeContrat?: string;
     dateEmbauche?: string;
     dateFinContrat?: string;
@@ -1954,6 +1958,12 @@ export type BulletinPaie = {
     prenom: string | null;
     fonction: string | null;
     matricule: string | null;
+    service: string | null;
+    typeContrat: string | null;
+    dateEmbauche: string | null;
+    numeroCnps: string | null;
+    niu: string | null;
+    situationFamille: string | null;
   };
 };
 

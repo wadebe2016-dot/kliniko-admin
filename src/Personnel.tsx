@@ -131,6 +131,8 @@ export default function Personnel({
   const [rhEmbauche, setRhEmbauche] = useState('');
   const [rhSalaire, setRhSalaire] = useState('');
   const [rhCnps, setRhCnps] = useState('');
+  const [rhNiu, setRhNiu] = useState('');
+  const [rhSituation, setRhSituation] = useState('');
 
   const peutGerer = aPermission('personnel.gerer');
   const estRh = aPermission('personnel.rh');
@@ -221,6 +223,8 @@ export default function Personnel({
           fiche.salaireBase !== null ? String(fiche.salaireBase) : '',
         );
         setRhCnps(fiche.numeroCnps ?? '');
+        setRhNiu(fiche.niu ?? '');
+        setRhSituation(fiche.situationFamille ?? '');
       } catch {
         // la fiche de base reste editable meme si le volet RH echoue
       }
@@ -256,6 +260,8 @@ export default function Personnel({
           dateEmbauche: rhEmbauche || undefined,
           salaireBase: rhSalaire ? Number(rhSalaire) : undefined,
           numeroCnps: rhCnps.trim(),
+          niu: rhNiu.trim(),
+          situationFamille: rhSituation,
         });
       }
       fermerModale();
@@ -716,6 +722,28 @@ export default function Personnel({
                         value={rhCnps}
                         onChange={(e) => setRhCnps(e.target.value)}
                       />
+                    </div>
+                  </div>
+                  <div className="row">
+                    <div className="field">
+                      <label>NIU (identifiant unique)</label>
+                      <input
+                        value={rhNiu}
+                        onChange={(e) => setRhNiu(e.target.value)}
+                      />
+                    </div>
+                    <div className="field">
+                      <label>Situation matrimoniale</label>
+                      <select
+                        value={rhSituation}
+                        onChange={(e) => setRhSituation(e.target.value)}
+                      >
+                        <option value="">—</option>
+                        <option value="Célibataire">Célibataire</option>
+                        <option value="Marié(e)">Marié(e)</option>
+                        <option value="Divorcé(e)">Divorcé(e)</option>
+                        <option value="Veuf(ve)">Veuf(ve)</option>
+                      </select>
                     </div>
                   </div>
                 </>

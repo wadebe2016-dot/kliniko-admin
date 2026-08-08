@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import QRCode from 'qrcode';
 import {
   getBulletinsPaie,
   getParametresPaie,
@@ -82,6 +83,7 @@ function echapper(t: string) {
 function gabaritBulletin(
   b: BulletinPaie,
   clinique: CliniquePublique | null,
+  qr: string,
 ): string {
   const nomComplet = `${b.personnel.nom} ${b.personnel.prenom ?? ''}`.trim();
   let primes: { libelle: string; montant: number }[] = [];
@@ -105,6 +107,9 @@ function gabaritBulletin(
       : []),
   ].join('');
 
+  const info = (libelle: string, valeur: string | null | undefined) =>
+    `<div class="cellule"><span class="etiquette">${libelle}</span><span class="valeur">${echapper(valeur || '—')}</span></div>`;
+
   return `<!doctype html><html lang="fr"><head><meta charset="utf-8">
 <title>Bulletin de paie ${echapper(nomComplet)} — ${MOIS_LIBELLE[b.mois - 1]} ${b.annee}</title>
 <style>
@@ -113,18 +118,28 @@ body { font-family: 'Segoe UI', Arial, sans-serif; color: #1c2733; font-size: 13
 .entete { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 3px solid #1d4f91; padding-bottom: 10px; }
 .clinique { font-size: 17px; font-weight: 700; color: #1d4f91; }
 .muted { color: #5b6572; font-size: 12px; }
-h1 { font-size: 16px; text-align: center; margin: 16px 0 2px; letter-spacing: 1px; }
-.periode { text-align: center; color: #5b6572; margin-bottom: 14px; }
-.employe { display: flex; justify-content: space-between; background: #f4f7fa; border: 1px solid #dde4ec; border-radius: 6px; padding: 10px 14px; margin-bottom: 14px; }
+h1 { font-size: 16px; text-align: center; margin: 14px 0 2px; letter-spacing: 1.5px; }
+.periode { text-align: center; color: #5b6572; margin-bottom: 12px; }
+.employe { background: #f4f7fa; border: 1px solid #dde4ec; border-radius: 8px; padding: 12px 16px; margin-bottom: 14px; }
+.employe .nom { font-size: 15px; font-weight: 700; margin-bottom: 8px; }
+.grille { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px 18px; }
+.cellule { font-size: 12px; }
+.etiquette { display: block; color: #8a94a1; font-size: 10px; text-transform: uppercase; letter-spacing: .5px; }
+.valeur { font-weight: 600; }
 table { width: 100%; border-collapse: collapse; }
 th { text-align: left; font-size: 11px; text-transform: uppercase; color: #5b6572; border-bottom: 2px solid #1d4f91; padding: 6px 8px; }
 th.m, td.m { text-align: right; white-space: nowrap; }
 td { padding: 7px 8px; border-bottom: 1px solid #e8ecef; }
 .totaux td { font-weight: 700; border-top: 2px solid #1d4f91; border-bottom: none; }
-.net { margin-top: 14px; text-align: right; }
-.net .montant { font-size: 20px; font-weight: 800; color: #166534; }
-.versement { margin-top: 6px; text-align: right; color: #5b6572; font-size: 12px; }
-.pied { margin-top: 26px; border-top: 1px solid #dde4ec; padding-top: 8px; font-size: 11px; color: #8a94a1; text-align: center; }
+.bas { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 16px; }
+.verif { text-align: center; }
+.verif img { width: 84px; height: 84px; }
+.verif .note { font-size: 9px; color: #8a94a1; margin-top: 2px; }
+.net-bloc { text-align: right; }
+.net-bloc .montant { font-size: 21px; font-weight: 800; color: #166534; }
+.versement { margin-top: 4px; color: #5b6572; font-size: 12px; }
+.signatures { display: flex; justify-content: space-between; margin-top: 34px; font-size: 12px; color: #5b6572; }
+.signatures div { width: 40%; border-top: 1px solid #9aa5b1; padding-top: 6px; text-align: center; }
 </style></head><body>
 <div class="entete">
   <div>
@@ -136,8 +151,17 @@ td { padding: 7px 8px; border-bottom: 1px solid #e8ecef; }
 <h1>BULLETIN DE PAIE</h1>
 <div class="periode">${MOIS_LIBELLE[b.mois - 1]} ${b.annee}</div>
 <div class="employe">
-  <div><strong>${echapper(nomComplet)}</strong><br><span class="muted">${echapper(b.personnel.fonction ?? '')}</span></div>
-  <div style="text-align:right">Matricule : <strong>${echapper(b.personnel.matricule ?? '—')}</strong></div>
+  <div class="nom">${echapper(nomComplet)}</div>
+  <div class="grille">
+    ${info('Matricule', b.personnel.matricule)}
+    ${info('Poste occupé', b.personnel.fonction)}
+    ${info('Service', b.personnel.service)}
+    ${info("Date d'embauche", b.personnel.dateEmbauche ? jour(b.personnel.dateEmbauche) : null)}
+    ${info('Type de contrat', b.personnel.typeContrat)}
+    ${info('Situation matrimoniale', b.personnel.situationFamille)}
+    ${info('N° CNPS', b.personnel.numeroCnps)}
+    ${info('NIU', b.personnel.niu)}
+  </div>
 </div>
 <table>
   <thead><tr><th>Rubrique</th><th class="m">Gains</th><th class="m">Retenues</th></tr></thead>
@@ -146,13 +170,21 @@ td { padding: 7px 8px; border-bottom: 1px solid #e8ecef; }
     <tr class="totaux"><td>Totaux</td><td class="m">${XAF(b.brut)}</td><td class="m">${XAF(totalRetenues)}</td></tr>
   </tbody>
 </table>
-<div class="net">Net à payer : <span class="montant">${XAF(b.net)}</span></div>
-<div class="versement">${
-    b.statutVersement === 'paye'
-      ? `Versé le ${jour(b.dateVersement)}${b.modeVersement ? ' par ' + (MODE_LIBELLE[b.modeVersement] ?? b.modeVersement).toLowerCase() : ''}`
-      : 'Versement en attente'
-  }</div>
-<div class="pied">Bulletin établi via Kliniko — outil d'aide au calcul (CNPS, IRPP, CAC), à faire valider par votre comptable.</div>
+<div class="bas">
+  ${qr ? `<div class="verif"><img src="${qr}" alt="Code QR"><div class="note">Scannez pour vérifier<br>l'authenticité de ce bulletin</div></div>` : '<div></div>'}
+  <div class="net-bloc">
+    Net à payer : <span class="montant">${XAF(b.net)}</span>
+    <div class="versement">${
+      b.statutVersement === 'paye'
+        ? `Versé le ${jour(b.dateVersement)}${b.modeVersement ? ' par ' + (MODE_LIBELLE[b.modeVersement] ?? b.modeVersement).toLowerCase() : ''}`
+        : 'Versement en attente'
+    }</div>
+  </div>
+</div>
+<div class="signatures">
+  <div>L'employeur</div>
+  <div>L'employé(e)</div>
+</div>
 </body></html>`;
 }
 
@@ -344,8 +376,17 @@ export default function Paie({
 
   async function ouvrirApercu(b: BulletinPaie) {
     const clinique = await cliniqueDuBulletin();
+    let qr = '';
+    try {
+      qr = await QRCode.toDataURL(
+        `${window.location.origin}/api/public/bulletins/${b.id}`,
+        { margin: 0, width: 240 },
+      );
+    } catch (e) {
+      console.error('Generation du code QR impossible', e);
+    }
     setApercu({
-      html: gabaritBulletin(b, clinique),
+      html: gabaritBulletin(b, clinique, qr),
       titre: `${b.personnel.nom} ${b.personnel.prenom ?? ''} — ${MOIS_LIBELLE[b.mois - 1]} ${b.annee}`,
     });
   }
