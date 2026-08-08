@@ -1480,3 +1480,24 @@ export async function modifierFicheRh(
   );
   if (!res.ok) await echecOrdonnance(res, 'Erreur lors de la mise à jour du volet RH');
 }
+
+export type TableauRh = {
+  effectif: number;
+  masseSalariale: number;
+  contratsEcheance: {
+    nom: string;
+    prenom: string | null;
+    fonction: string;
+    typeContrat: string | null;
+    dateFinContrat: string | null;
+  }[];
+  parContrat: { cle: string; nombre: number }[];
+  parSexe: { cle: string; nombre: number }[];
+  masseParFonction: { fonction: string; masse: number }[];
+};
+
+export async function getTableauRh(): Promise<TableauRh> {
+  const res = await appelApi('/personnel/tableau-de-bord');
+  if (!res.ok) await echecOrdonnance(res, 'Erreur lors du chargement du tableau RH');
+  return res.json();
+}

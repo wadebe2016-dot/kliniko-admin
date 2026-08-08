@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   getPersonnel,
   getFicheRh,
+  getTableauRh,
   creerPersonnel,
   modifierPersonnel,
   modifierFicheRh,
@@ -9,6 +10,7 @@ import {
   type MembrePersonnel,
   type FicheRh,
   type StatutPersonnel,
+  type TableauRh,
 } from './api';
 
 const XAF = (n: number) => n.toLocaleString('fr-FR') + ' XAF';
@@ -28,6 +30,69 @@ const STATUT_STYLE: Record<StatutPersonnel, { background: string; color: string 
   suspendu: { background: '#fdece7', color: '#8c3520' },
   parti: { background: '#e8ecef', color: '#5b6572' },
 };
+
+const PALETTE = ['#1d4f91', '#1c9d55', '#e9a922', '#d64545', '#8a94a1', '#0e9488'];
+const SEXE_LIBELLE: Record<string, string> = {
+  M: 'Masculin',
+  F: 'Féminin',
+  'Non défini': '?',
+};
+
+// Anneau de repartition en pur CSS (conic-gradient), avec sa legende
+function Anneau({ donnees }: { donnees: { cle: string; nombre: number }[] }) {
+  const total = donnees.reduce((s, d) => s + d.nombre, 0);
+  if (total === 0) return <p className="muted">Aucune donnée.</p>;
+  let acc = 0;
+  const parts = donnees.map((d, i) => {
+    const debut = (acc / total) * 100;
+    acc += d.nombre;
+    const fin = (acc / total) * 100;
+    return `${PALETTE[i % PALETTE.length]} ${debut}% ${fin}%`;
+  });
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+      <div
+        style={{
+          width: 110,
+          height: 110,
+          borderRadius: '50%',
+          background: `conic-gradient(${parts.join(', ')})`,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          flex: 'none',
+        }}
+      >
+        <div
+          style={{
+            width: 62,
+            height: 62,
+            borderRadius: '50%',
+            background: '#fff',
+          }}
+        />
+      </div>
+      <div>
+        {donnees.map((d, i) => (
+          <div key={d.cle} style={{ fontSize: 13, marginBottom: 3 }}>
+            <span
+              style={{
+                display: 'inline-block',
+                width: 10,
+                height: 10,
+                borderRadius: 2,
+                background: PALETTE[i % PALETTE.length],
+                marginRight: 6,
+              }}
+            />
+            {SEXE_LIBELLE[d.cle] ?? d.cle}
+            <span className="muted"> · {d.nombre}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export default function Personnel({
   onSessionExpiree,
@@ -68,6 +133,12 @@ export default function Personnel({
   const peutGerer = aPermission('personnel.gerer');
   const estRh = aPermission('personnel.rh');
 
+  // Onglets internes, sur le modele Edufo
+  const [onglet, setOnglet] = useState<'tableau' | 'dossiers'>(
+    estRh ? 'tableau' : 'dossiers',
+  );
+  const [tdb, setTdb] = useState<TableauRh | null>(null);
+
   const traiter = useCallback(
     (e: unknown) => {
       const m = (e as Error).message;
@@ -81,6 +152,9 @@ export default function Personnel({
     try {
       setChargement(true);
       setMembres(await getPersonnel());
+      if (aPermission('personnel.rh')) {
+        setTdb(await getTableauRh());
+      }
       setErreur(null);
     } catch (e) {
       traiter(e);
@@ -202,8 +276,170 @@ export default function Personnel({
         .reduce((s, p) => s + (p.salaireBase ?? 0), 0)
     : null;
 
+  const jourFr = (iso: string | null) =>
+    iso ? new Date(iso).toLocaleDateString('fr-FR') : '—';
+  const joursRestants = (iso: string | null) =>
+    iso
+      ? Math.max(0, Math.ceil((new Date(iso).getTime() - Date.now()) / 86400000))
+      : null;
+  const masseMax = tdb
+    ? Math.max(1, ...tdb.masseParFonction.map((f) => f.masse))
+    : 1;
+
   return (
     <>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
+        {estRh && (
+          <button
+            type="button"
+            className={onglet === 'tableau' ? 'btn-primary' : ''}
+            style={{ padding: '6px 16px' }}
+            onClick={() => setOnglet('tableau')}
+          >
+            Tableau de bord
+          </button>
+        )}
+        <button
+          type="button"
+          className={onglet === 'dossiers' ? 'btn-primary' : ''}
+          style={{ padding: '6px 16px' }}
+          onClick={() => setOnglet('dossiers')}
+        >
+          Dossiers du personnel
+        </button>
+        <button type="button" disabled style={{ padding: '6px 16px' }} title="Phase 2 — à venir">
+          Paie
+        </button>
+        <button type="button" disabled style={{ padding: '6px 16px' }} title="Phase 2 — à venir">
+          Congés
+        </button>
+      </div>
+
+      {onglet === 'tableau' && estRh && tdb && (
+        <>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+              gap: 12,
+              marginBottom: 14,
+            }}
+          >
+            <section className="card">
+              <div className="muted" style={{ fontSize: 12, letterSpacing: 1 }}>
+                EFFECTIF
+              </div>
+              <div style={{ fontSize: 30, fontWeight: 700 }}>{tdb.effectif}</div>
+            </section>
+            <section className="card">
+              <div className="muted" style={{ fontSize: 12, letterSpacing: 1 }}>
+                MASSE SALARIALE
+              </div>
+              <div style={{ fontSize: 24, fontWeight: 700, color: '#1c6b3c' }}>
+                {XAF(tdb.masseSalariale)}
+              </div>
+              <div className="muted" style={{ fontSize: 12 }}>
+                Salaires de base, par mois
+              </div>
+            </section>
+            <section className="card">
+              <div className="muted" style={{ fontSize: 12, letterSpacing: 1 }}>
+                CONTRATS À ÉCHÉANCE
+              </div>
+              <div
+                style={{
+                  fontSize: 30,
+                  fontWeight: 700,
+                  color: tdb.contratsEcheance.length > 0 ? '#b7791f' : undefined,
+                }}
+              >
+                {tdb.contratsEcheance.length}
+              </div>
+              <div className="muted" style={{ fontSize: 12 }}>
+                Dans les 60 prochains jours
+              </div>
+            </section>
+          </div>
+
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+              gap: 12,
+              marginBottom: 14,
+            }}
+          >
+            <section className="card">
+              <h2 style={{ marginBottom: 10 }}>Répartition par contrat</h2>
+              <Anneau donnees={tdb.parContrat} />
+            </section>
+            <section className="card">
+              <h2 style={{ marginBottom: 10 }}>Répartition par sexe</h2>
+              <Anneau donnees={tdb.parSexe} />
+            </section>
+            <section className="card">
+              <h2 style={{ marginBottom: 10 }}>Masse salariale par fonction</h2>
+              {tdb.masseParFonction.map((f) => (
+                <div key={f.fonction} style={{ marginBottom: 7 }}>
+                  <div style={{ fontSize: 12.5, marginBottom: 2 }}>
+                    {f.fonction}
+                    <span className="muted"> · {XAF(f.masse)}</span>
+                  </div>
+                  <div
+                    style={{
+                      height: 10,
+                      borderRadius: 5,
+                      background: '#1d4f91',
+                      width: `${Math.max(3, (f.masse / masseMax) * 100)}%`,
+                    }}
+                  />
+                </div>
+              ))}
+            </section>
+          </div>
+
+          <section className="card">
+            <div className="list-header">
+              <h2>Contrats arrivant à échéance (60 jours)</h2>
+            </div>
+            {tdb.contratsEcheance.length === 0 && (
+              <p className="muted">Aucun contrat n'arrive à échéance.</p>
+            )}
+            {tdb.contratsEcheance.length > 0 && (
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Nom</th>
+                    <th>Fonction</th>
+                    <th>Type de contrat</th>
+                    <th>Fin de contrat</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {tdb.contratsEcheance.map((c, i) => (
+                    <tr key={i}>
+                      <td>
+                        {c.nom} {c.prenom ?? ''}
+                      </td>
+                      <td>{c.fonction}</td>
+                      <td>{c.typeContrat ?? '—'}</td>
+                      <td>
+                        <b style={{ color: '#b7791f' }}>{jourFr(c.dateFinContrat)}</b>{' '}
+                        <span className="muted">
+                          ({joursRestants(c.dateFinContrat)} jours)
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </section>
+        </>
+      )}
+
+      {onglet === 'dossiers' && (
+        <>
       {peutGerer && (
         <section className="card form-card">
           <h2>Nouveau membre du personnel</h2>
@@ -332,6 +568,8 @@ export default function Personnel({
           </table>
         )}
       </section>
+        </>
+      )}
 
       {mMembre && (
         <div
