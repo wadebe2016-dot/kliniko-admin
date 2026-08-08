@@ -817,3 +817,90 @@ export async function getTableauDeBord(): Promise<TableauDeBordStats> {
   if (!res.ok) throw new Error('Erreur lors du chargement du tableau de bord');
   return res.json();
 }
+
+// ----------------------------------------------------------------------------
+// Pharmacie et stock
+// ----------------------------------------------------------------------------
+
+export type ArticleStock = {
+  id: string;
+  code: string | null;
+  denomination: string;
+  forme: string | null;
+  dosage: string | null;
+  prixVente: number | null;
+  seuilAlerte: number;
+  stock: number;
+  sousSeuil: boolean;
+  peremptionProche: string | null;
+};
+
+export type MouvementStock = {
+  id: string;
+  type: 'entree' | 'sortie' | 'ajustement';
+  quantite: number;
+  datePeremption: string | null;
+  motif: string | null;
+  createdAt: string;
+  medicament: { denomination: string; dosage: string | null };
+  ordonnance: { numero: string } | null;
+  facture: { numero: string } | null;
+};
+
+export async function getStockPharmacie(): Promise<ArticleStock[]> {
+  const res = await appelApi('/pharmacie/stock');
+  if (!res.ok) await echecOrdonnance(res, 'Erreur lors du chargement du stock');
+  return res.json();
+}
+
+export async function getMouvementsStock(): Promise<MouvementStock[]> {
+  const res = await appelApi('/pharmacie/mouvements');
+  if (!res.ok) await echecOrdonnance(res, 'Erreur lors du chargement des mouvements');
+  return res.json();
+}
+
+export async function entreeStock(data: {
+  medicamentId: string;
+  quantite: number;
+  datePeremption?: string;
+  prixAchat?: number;
+  motif?: string;
+}): Promise<void> {
+  const res = await appelApi('/pharmacie/entrees', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) await echecOrdonnance(res, "Erreur lors de l'entree de stock");
+}
+
+export async function ajustementStock(data: {
+  medicamentId: string;
+  quantite: number;
+  motif: string;
+}): Promise<void> {
+  const res = await appelApi('/pharmacie/ajustements', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) await echecOrdonnance(res, "Erreur lors de l'ajustement");
+}
+
+export async function dispenserOrdonnance(data: {
+  ordonnanceId: string;
+  lignes: { medicamentId: string; quantite: number }[];
+  facturer?: boolean;
+}): Promise<{
+  ordonnance: string;
+  lignesDispensees: number;
+  facture: { id: string; numero: string; montantTotal: number } | null;
+}> {
+  const res = await appelApi('/pharmacie/dispensations', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) await echecOrdonnance(res, 'Erreur lors de la dispensation');
+  return res.json();
+}
