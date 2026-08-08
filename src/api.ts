@@ -1318,6 +1318,7 @@ export async function creerActif(data: {
   localisation?: string;
   dateAcquisition?: string;
   valeurAcquisition?: number;
+  dureeAmortAnnees?: number;
   notes?: string;
 }): Promise<void> {
   const res = await appelApi('/patrimoine/actifs', {
