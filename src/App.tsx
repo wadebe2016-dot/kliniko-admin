@@ -22,6 +22,7 @@ import Consommables from './Consommables';
 import Patrimoine from './Patrimoine';
 import Personnel from './Personnel';
 import Tarifs from './Tarifs';
+import Tresorerie from './Tresorerie';
 import './App.css';
 
 type Vue =
@@ -32,6 +33,7 @@ type Vue =
   | 'ordonnances'
   | 'factures'
   | 'tarifs'
+  | 'tresorerie'
   | 'pharmacie'
   | 'hospitalisation'
   | 'consommables'
@@ -49,6 +51,7 @@ const TITRES: Record<Vue, string> = {
   ordonnances: 'Ordonnances et prescriptions',
   factures: 'Facturation et caisse',
   tarifs: 'Tarifs et mercuriale',
+  tresorerie: 'Trésorerie',
   pharmacie: 'Pharmacie et stock',
   hospitalisation: 'Chambres et hospitalisation',
   consommables: 'Consommables',
@@ -83,6 +86,7 @@ const GROUPES: {
     entrees: [
       { vue: 'factures', libelle: 'Facturation', perm: 'facture.lire' },
       { vue: 'tarifs', libelle: 'Tarifs', perm: 'tarif.lire' },
+      { vue: 'tresorerie', libelle: 'Trésorerie', perm: 'tresorerie.lire' },
     ],
   },
   {
@@ -332,6 +336,8 @@ function App() {
             <Patrimoine onSessionExpiree={() => setUtilisateur(null)} />
           ) : vue === 'personnel' ? (
             <Personnel onSessionExpiree={() => setUtilisateur(null)} />
+          ) : vue === 'tresorerie' ? (
+            <Tresorerie onSessionExpiree={() => setUtilisateur(null)} />
           ) : vue === 'consultations' ? (
             <Consultations onSessionExpiree={() => setUtilisateur(null)} />
           ) : vue === 'utilisateurs' ? (

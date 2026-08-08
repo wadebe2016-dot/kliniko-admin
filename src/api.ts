@@ -1501,3 +1501,131 @@ export async function getTableauRh(): Promise<TableauRh> {
   if (!res.ok) await echecOrdonnance(res, 'Erreur lors du chargement du tableau RH');
   return res.json();
 }
+
+// ----------------------------------------------------------------------------
+// Tresorerie : comptes, categories, mouvements
+// ----------------------------------------------------------------------------
+
+export type CompteTresorerie = {
+  id: string;
+  nom: string;
+  type: 'caisse' | 'banque' | 'mobile_money';
+  solde: number;
+};
+
+export type CategorieTresorerie = {
+  id: string;
+  nom: string;
+  sens: 'recette' | 'depense';
+};
+
+export type MouvementTresorerie = {
+  id: string;
+  type: 'recette' | 'depense' | 'transfert';
+  libelle: string;
+  beneficiaire: string | null;
+  montant: number | string;
+  dateMouvement: string;
+  factureId: string | null;
+  compte: { nom: string };
+  compteDest: { nom: string } | null;
+  categorie: { nom: string } | null;
+};
+
+export async function getComptesTresorerie(): Promise<CompteTresorerie[]> {
+  const res = await appelApi('/tresorerie/comptes');
+  if (!res.ok) await echecOrdonnance(res, 'Erreur lors du chargement des comptes');
+  return res.json();
+}
+
+export async function getCategoriesTresorerie(): Promise<CategorieTresorerie[]> {
+  const res = await appelApi('/tresorerie/categories');
+  if (!res.ok) await echecOrdonnance(res, 'Erreur lors du chargement des catégories');
+  return res.json();
+}
+
+export async function getMouvementsTresorerie(
+  du?: string,
+  au?: string,
+): Promise<MouvementTresorerie[]> {
+  const q = new URLSearchParams();
+  if (du) q.set('du', du);
+  if (au) q.set('au', au);
+  const res = await appelApi(`/tresorerie/mouvements?${q.toString()}`);
+  if (!res.ok) await echecOrdonnance(res, 'Erreur lors du chargement des mouvements');
+  return res.json();
+}
+
+export async function creerCompteTresorerie(data: {
+  nom: string;
+  type: 'caisse' | 'banque' | 'mobile_money';
+}): Promise<void> {
+  const res = await appelApi('/tresorerie/comptes', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) await echecOrdonnance(res, 'Erreur lors de la création du compte');
+}
+
+export async function creerCategorieTresorerie(data: {
+  nom: string;
+  sens: 'recette' | 'depense';
+}): Promise<void> {
+  const res = await appelApi('/tresorerie/categories', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) await echecOrdonnance(res, 'Erreur lors de la création de la catégorie');
+}
+
+type DonneesMouvement = {
+  compteId: string;
+  categorieId?: string;
+  libelle: string;
+  beneficiaire?: string;
+  montant: number;
+  date?: string;
+};
+
+export async function creerRecette(data: DonneesMouvement): Promise<void> {
+  const res = await appelApi('/tresorerie/recettes', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) await echecOrdonnance(res, "Erreur lors de l'enregistrement de la recette");
+}
+
+export async function creerDepense(data: DonneesMouvement): Promise<void> {
+  const res = await appelApi('/tresorerie/depenses', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) await echecOrdonnance(res, "Erreur lors de l'enregistrement de la dépense");
+}
+
+export async function creerTransfert(data: {
+  compteId: string;
+  compteDestId: string;
+  montant: number;
+  libelle?: string;
+  date?: string;
+}): Promise<void> {
+  const res = await appelApi('/tresorerie/transferts', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) await echecOrdonnance(res, 'Erreur lors du transfert');
+}
+
+export async function supprimerMouvement(mouvementId: string): Promise<void> {
+  const res = await appelApi(
+    `/tresorerie/mouvements/${encodeURIComponent(mouvementId)}`,
+    { method: 'DELETE' },
+  );
+  if (!res.ok) await echecOrdonnance(res, 'Erreur lors de la suppression');
+}
