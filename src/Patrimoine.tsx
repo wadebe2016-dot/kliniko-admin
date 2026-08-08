@@ -12,8 +12,6 @@ import {
 } from './api';
 
 const XAF = (n: number) => n.toLocaleString('fr-FR') + ' XAF';
-const jour = (iso: string | null) =>
-  iso ? new Date(iso).toLocaleDateString('fr-FR') : '—';
 const quand = (iso: string) =>
   new Date(iso).toLocaleString('fr-FR', {
     day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
