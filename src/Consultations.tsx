@@ -4,11 +4,13 @@ import {
   createConsultation,
   getConsultations,
   getPatients,
+  getPreConsultations,
   getRendezVous,
   suggererCompteRendu,
   updateConsultation,
   type Consultation,
   type Patient,
+  type PreConsultation,
   type RendezVous,
 } from './api';
 
@@ -27,6 +29,20 @@ const PAIEMENT_LIBELLE: Record<string, string> = {
   momo: 'Mobile Money',
   especes: 'Espèces à la caisse',
 };
+
+// Resume lisible des constantes d'une pre-consultation
+function resumeConstantes(p: PreConsultation): string {
+  const parts: string[] = [];
+  if (p.tensionSys != null && p.tensionDia != null) {
+    parts.push(`TA ${p.tensionSys}/${p.tensionDia}`);
+  }
+  if (p.temperature != null) parts.push(`${Number(p.temperature)} °C`);
+  if (p.poids != null) parts.push(`${Number(p.poids)} kg`);
+  if (p.taille != null) parts.push(`${p.taille} cm`);
+  if (p.pouls != null) parts.push(`${p.pouls} bpm`);
+  if (p.saturation != null) parts.push(`SpO2 ${p.saturation} %`);
+  return parts.join(' · ');
+}
 
 // L'etat caisse d'un rendez-vous pris en ligne : deduit de sa facture.
 // C'est lui qui autorise (ou non) le passage en pre-consultation.
@@ -85,6 +101,8 @@ function Consultations({ onSessionExpiree }: Props) {
 
   // Consultation ouverte en detail (edition du contenu medical)
   const [detail, setDetail] = useState<Consultation | null>(null);
+  // Derniere pre-consultation du patient choisi (constantes pour le medecin)
+  const [constantes, setConstantes] = useState<PreConsultation | null>(null);
   const [editMotif, setEditMotif] = useState('');
   const [editObservations, setEditObservations] = useState('');
   const [editDiagnostic, setEditDiagnostic] = useState('');
@@ -124,6 +142,23 @@ function Consultations({ onSessionExpiree }: Props) {
     charger(filtrePatient);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filtrePatient]);
+
+  // La derniere prise de constantes du patient choisi, pour le formulaire
+  useEffect(() => {
+    setConstantes(null);
+    if (!patientId || !aPermission('preconsultation.lire')) return;
+    let annule = false;
+    getPreConsultations(patientId)
+      .then((liste) => {
+        if (!annule) setConstantes(liste[0] ?? null);
+      })
+      .catch(() => {
+        // silencieux : les constantes sont un plus, jamais un blocage
+      });
+    return () => {
+      annule = true;
+    };
+  }, [patientId]);
 
   // Rendez-vous proposes : ceux du patient choisi, encore actifs
   const rdvsDuPatient = rdvs.filter(
@@ -324,6 +359,39 @@ function Consultations({ onSessionExpiree }: Props) {
                 </div>
               </div>
             )}
+            {/* Les constantes prises par l'infirmiere : affichees pour tout
+                patient choisi, qu'il vienne d'un rendez-vous ou de passage. */}
+            {patientId && constantes && resumeConstantes(constantes) && (
+              <div
+                style={{
+                  border: '1px solid #d7dee6',
+                  borderLeft: '4px solid #0f766e',
+                  borderRadius: 8,
+                  padding: '10px 14px',
+                  marginBottom: 12,
+                  background: '#fafcfc',
+                }}
+              >
+                <div style={{ fontWeight: 600, marginBottom: 4 }}>
+                  Constantes — pré-consultation
+                </div>
+                <div style={{ fontSize: '0.95em' }}>
+                  {resumeConstantes(constantes)}
+                </div>
+                {constantes.notes && (
+                  <div style={{ fontSize: '0.9em', marginTop: 3 }}>
+                    {constantes.notes}
+                  </div>
+                )}
+                <div className="muted" style={{ fontSize: '0.85em', marginTop: 4 }}>
+                  Prise le {fmtDate(constantes.datePrise)}
+                  {constantes.utilisateur
+                    ? ` par ${constantes.utilisateur.prenom ?? ''} ${constantes.utilisateur.nom}`.trimEnd()
+                    : ''}
+                </div>
+              </div>
+            )}
+
             <div className="field">
               <label>Motif</label>
               <input

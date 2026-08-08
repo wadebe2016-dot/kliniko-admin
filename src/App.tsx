@@ -9,6 +9,7 @@ import {
   type Utilisateur,
 } from './api';
 import Agenda from './Agenda';
+import PreConsultations from './PreConsultations';
 import Factures from './Factures';
 import Consultations from './Consultations';
 import Utilisateurs from './Utilisateurs';
@@ -16,6 +17,7 @@ import MonCompte from './MonCompte';
 import Ordonnances from './Ordonnances';
 import Disponibilites from './Disponibilites';
 import TableauDeBord from './TableauDeBord';
+import Espace from './Espace';
 import Pharmacie from './Pharmacie';
 import Hospitalisation from './Hospitalisation';
 import Consommables from './Consommables';
@@ -27,8 +29,10 @@ import './App.css';
 
 type Vue =
   | 'tableau'
+  | 'espace'
   | 'patients'
   | 'agenda'
+  | 'preconsultations'
   | 'consultations'
   | 'ordonnances'
   | 'factures'
@@ -45,8 +49,10 @@ type Vue =
 
 const TITRES: Record<Vue, string> = {
   tableau: 'Tableau de bord',
+  espace: 'Mon espace',
   patients: 'Patients',
   agenda: 'Agenda des rendez-vous',
+  preconsultations: 'Pré-consultations — prise des paramètres',
   consultations: 'Consultations et dossier médical',
   ordonnances: 'Ordonnances et prescriptions',
   factures: 'Facturation et caisse',
@@ -73,10 +79,15 @@ const GROUPES: {
     entrees: [{ vue: 'tableau', libelle: 'Tableau de bord' }],
   },
   {
+    libelle: 'Espace personnel',
+    entrees: [{ vue: 'espace', libelle: 'Mon espace' }],
+  },
+  {
     libelle: 'Parcours patient',
     entrees: [
       { vue: 'patients', libelle: 'Patients', perm: 'patient.lire' },
       { vue: 'agenda', libelle: 'Agenda', perm: 'rdv.lire' },
+      { vue: 'preconsultations', libelle: 'Pré-consultations', perm: 'preconsultation.lire' },
       { vue: 'consultations', libelle: 'Consultations', perm: 'consultation.lire' },
       { vue: 'ordonnances', libelle: 'Ordonnances', perm: 'ordonnance.lire' },
     ],
@@ -338,6 +349,13 @@ function App() {
             <Personnel onSessionExpiree={() => setUtilisateur(null)} />
           ) : vue === 'tresorerie' ? (
             <Tresorerie onSessionExpiree={() => setUtilisateur(null)} />
+          ) : vue === 'espace' ? (
+            <Espace
+              onSessionExpiree={() => setUtilisateur(null)}
+              utilisateur={utilisateur}
+            />
+          ) : vue === 'preconsultations' ? (
+            <PreConsultations onSessionExpiree={() => setUtilisateur(null)} />
           ) : vue === 'consultations' ? (
             <Consultations onSessionExpiree={() => setUtilisateur(null)} />
           ) : vue === 'utilisateurs' ? (

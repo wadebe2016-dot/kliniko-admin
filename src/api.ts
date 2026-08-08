@@ -2277,3 +2277,72 @@ export async function getMesBulletins(annee?: number): Promise<BulletinPaie[]> {
   if (!res.ok) await echecOrdonnance(res, 'Erreur lors du chargement de vos bulletins');
   return res.json();
 }
+
+// ---------------------------------------------------------------------------
+// Pre-consultations : les constantes prises par l'infirmiere avant la
+// consultation. Jamais modifiees apres coup — on en reprend une si besoin.
+// ---------------------------------------------------------------------------
+
+export type PreConsultation = {
+  id: string;
+  patientId: string;
+  rendezVousId: string | null;
+  datePrise: string;
+  tensionSys: number | null;
+  tensionDia: number | null;
+  temperature: string | number | null;
+  poids: string | number | null;
+  taille: number | null;
+  pouls: number | null;
+  saturation: number | null;
+  notes: string | null;
+  patient: { nom: string; prenom: string | null; numeroDossier: string };
+  utilisateur: { nom: string; prenom: string | null } | null;
+  rendezVous: { id: string; debut: string } | null;
+};
+
+// Lister : par patient (dossier), ou par periode (file du jour)
+export async function getPreConsultations(
+  patientId?: string,
+  du?: string,
+  au?: string,
+): Promise<PreConsultation[]> {
+  const params = new URLSearchParams();
+  if (patientId) params.set('patientId', patientId);
+  if (du) params.set('du', du);
+  if (au) params.set('au', au);
+  const q = params.toString();
+  const res = await appelApi(`/pre-consultations${q ? '?' + q : ''}`);
+  if (!res.ok) {
+    throw new Error(
+      await messageErreur(res, 'Erreur lors du chargement des pré-consultations'),
+    );
+  }
+  return res.json();
+}
+
+// Prendre les parametres d'un patient (avec ou sans rendez-vous lie)
+export async function createPreConsultation(data: {
+  patientId: string;
+  rendezVousId?: string;
+  tensionSys?: number;
+  tensionDia?: number;
+  temperature?: number;
+  poids?: number;
+  taille?: number;
+  pouls?: number;
+  saturation?: number;
+  notes?: string;
+}): Promise<PreConsultation> {
+  const res = await appelApi('/pre-consultations', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    throw new Error(
+      await messageErreur(res, "Erreur lors de l'enregistrement des paramètres"),
+    );
+  }
+  return res.json();
+}
