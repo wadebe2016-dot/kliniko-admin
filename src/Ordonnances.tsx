@@ -12,6 +12,7 @@ import {
   type Ordonnance,
   type LigneOrdonnance,
 } from './api';
+import QRCode from 'qrcode';
 
 const LIGNE_VIDE = {
   medicamentId: '',
@@ -40,7 +41,7 @@ function libelleStatut(s: Ordonnance['statut']): string {
 
 // L'impression passe par un cadre invisible plutot que par une fenetre :
 // les bloqueurs de fenetres surgissantes ne s'y opposent pas.
-function imprimer(o: Ordonnance) {
+async function imprimer(o: Ordonnance) {
   const patient = `${o.patient.nom} ${o.patient.prenom ?? ''}`.trim();
   const age = o.patient.dateNaissance
     ? Math.floor(
@@ -50,6 +51,17 @@ function imprimer(o: Ordonnance) {
   const praticien = o.praticien
     ? `${o.praticien.prenom ?? ''} ${o.praticien.nom}`.trim()
     : '';
+
+  // Code QR vers la page publique de verification
+  let qr = '';
+  try {
+    qr = await QRCode.toDataURL(
+      `${window.location.origin}/api/public/ordonnances/${o.id}`,
+      { margin: 0, width: 240 },
+    );
+  } catch {
+    // sans QR : l'impression reste possible
+  }
 
   const bandeau =
     o.statut === 'brouillon'
@@ -127,14 +139,17 @@ function imprimer(o: Ordonnance) {
   .det { font-size: 9.5pt; color: #5b6572; margin-top: 2px; }
   .notes { margin-top: 14px; font-style: italic; color: #374151; border-left: 3px solid #0f766e;
            background: #f8fafc; padding: 7px 12px; font-size: 10pt; border-radius: 0 6px 6px 0; }
-  .final { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 34px; }
+  .final { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 30px; }
   .lieu { font-size: 10pt; color: #374151; }
+  .verif { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+  .verif img { width: 22mm; height: 22mm; }
+  .verif .note { font-size: 8pt; color: #8a94a1; line-height: 1.5; }
   .signature { text-align: center; font-size: 10pt; }
   .cadre-sign { border: 1px solid #cbd5e1; border-radius: 8px; width: 68mm; height: 30mm;
                 margin-top: 6px; position: relative; }
   .cadre-sign span { position: absolute; bottom: 4px; left: 0; right: 0; font-size: 8pt;
                      color: #94a3b8; }
-  .pied { border-top: 1px solid #e2e8f0; margin-top: 26px; padding-top: 6px;
+  .pied { border-top: 1px solid #e2e8f0; margin-top: 22px; padding-top: 6px;
           font-size: 8.5pt; color: #8a94a1; text-align: center; }
 </style></head><body>
 <header class="entete">
@@ -164,7 +179,10 @@ ${bandeau}
 <div class="lignes">${lignes}</div>
 ${o.notes ? `<div class="notes">${echapper(o.notes)}</div>` : ''}
 <div class="final">
-  <div class="lieu">${lieuDate}</div>
+  <div>
+    <div class="lieu">${lieuDate}</div>
+    ${qr ? `<div class="verif"><img src="${qr}" alt="Code QR de vérification"><div class="note">Scannez pour vérifier<br>l'authenticité de<br>cette ordonnance</div></div>` : ''}
+  </div>
   <div class="signature">
     <b>${praticien ? echapper(praticien) : ''}</b>
     <div class="cadre-sign"><span>Signature et cachet</span></div>

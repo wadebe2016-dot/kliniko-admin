@@ -1010,3 +1010,31 @@ export async function annulerSejour(data: {
   });
   if (!res.ok) await echecOrdonnance(res, "Erreur lors de l'annulation du séjour");
 }
+
+export async function modifierChambre(
+  chambreId: string,
+  data: {
+    numero?: string;
+    categorie?: string;
+    tarifJournalier?: number;
+    nbLits?: number;
+  },
+): Promise<void> {
+  const res = await appelApi(
+    `/hospitalisation/chambres/${encodeURIComponent(chambreId)}`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    },
+  );
+  if (!res.ok) await echecOrdonnance(res, 'Erreur lors de la modification de la chambre');
+}
+
+export async function supprimerChambre(chambreId: string): Promise<void> {
+  const res = await appelApi(
+    `/hospitalisation/chambres/${encodeURIComponent(chambreId)}`,
+    { method: 'DELETE' },
+  );
+  if (!res.ok) await echecOrdonnance(res, 'Erreur lors de la suppression de la chambre');
+}

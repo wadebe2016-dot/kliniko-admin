@@ -3,6 +3,8 @@ import {
   getChambres,
   getSejours,
   creerChambre,
+  modifierChambre,
+  supprimerChambre,
   admettrePatient,
   sortirPatient,
   annulerSejour,
@@ -57,7 +59,8 @@ export default function Hospitalisation({
   const [aMotif, setAMotif] = useState('');
   const [aNotes, setANotes] = useState('');
 
-  // Nouvelle chambre
+  // Nouvelle chambre / modification
+  const [cEdition, setCEdition] = useState<string | null>(null);
   const [cNumero, setCNumero] = useState('');
   const [cCategorie, setCCategorie] = useState('');
   const [cTarif, setCTarif] = useState('');
@@ -138,6 +141,24 @@ export default function Hospitalisation({
     }
   }
 
+  function viderFormChambre() {
+    setCEdition(null);
+    setCNumero('');
+    setCCategorie('');
+    setCTarif('');
+    setCNbLits(2);
+  }
+
+  function editerChambre(c: ChambreOccupation) {
+    setCEdition(c.id);
+    setCNumero(c.numero);
+    setCCategorie(c.categorie ?? '');
+    setCTarif(c.tarifJournalier !== null ? String(c.tarifJournalier) : '');
+    setCNbLits(c.lits.length);
+    setInfo(null);
+    setErreur(null);
+  }
+
   async function validerChambre() {
     if (!cNumero.trim()) {
       setErreur('Indiquez le numéro de la chambre');
@@ -147,17 +168,41 @@ export default function Hospitalisation({
     setErreur(null);
     setInfo(null);
     try {
-      await creerChambre({
-        numero: cNumero.trim(),
-        categorie: cCategorie.trim() || undefined,
-        tarifJournalier: cTarif ? Number(cTarif) : undefined,
-        nbLits: cNbLits,
-      });
-      setCNumero('');
-      setCCategorie('');
-      setCTarif('');
-      setCNbLits(2);
-      setInfo('Chambre créée.');
+      if (cEdition) {
+        await modifierChambre(cEdition, {
+          numero: cNumero.trim(),
+          categorie: cCategorie.trim(),
+          tarifJournalier: cTarif ? Number(cTarif) : undefined,
+          nbLits: cNbLits,
+        });
+        setInfo('Chambre modifiée.');
+      } else {
+        await creerChambre({
+          numero: cNumero.trim(),
+          categorie: cCategorie.trim() || undefined,
+          tarifJournalier: cTarif ? Number(cTarif) : undefined,
+          nbLits: cNbLits,
+        });
+        setInfo('Chambre créée.');
+      }
+      viderFormChambre();
+      await charger();
+    } catch (e) {
+      traiter(e);
+    } finally {
+      setEnCours(false);
+    }
+  }
+
+  async function supprimer(c: ChambreOccupation) {
+    if (!window.confirm(`Supprimer la chambre ${c.numero} ?`)) return;
+    setEnCours(true);
+    setErreur(null);
+    setInfo(null);
+    try {
+      await supprimerChambre(c.id);
+      if (cEdition === c.id) viderFormChambre();
+      setInfo('Chambre supprimée.');
       await charger();
     } catch (e) {
       traiter(e);
@@ -279,7 +324,9 @@ export default function Hospitalisation({
               Admettre
             </button>
 
-            <h2 style={{ marginTop: 18 }}>Nouvelle chambre</h2>
+            <h2 style={{ marginTop: 18 }}>
+              {cEdition ? 'Modifier la chambre' : 'Nouvelle chambre'}
+            </h2>
             <div className="row">
               <div className="field">
                 <label>Numéro</label>
@@ -324,8 +371,13 @@ export default function Hospitalisation({
               disabled={enCours}
               onClick={validerChambre}
             >
-              Créer la chambre
+              {cEdition ? 'Enregistrer la chambre' : 'Créer la chambre'}
             </button>
+            {cEdition && (
+              <button type="button" disabled={enCours} onClick={viderFormChambre}>
+                Annuler la modification
+              </button>
+            )}
             {erreur && <p className="error">{erreur}</p>}
             {info && <p className="muted">{info}</p>}
           </div>
@@ -359,6 +411,24 @@ export default function Hospitalisation({
                   .filter(Boolean)
                   .join(' · ')}
               </span>
+              {peutGerer && (
+                <span style={{ marginLeft: 10 }}>
+                  <button
+                    type="button"
+                    disabled={enCours}
+                    onClick={() => editerChambre(c)}
+                  >
+                    Modifier
+                  </button>{' '}
+                  <button
+                    type="button"
+                    disabled={enCours}
+                    onClick={() => supprimer(c)}
+                  >
+                    Supprimer
+                  </button>
+                </span>
+              )}
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
               {c.lits.map((l) => (
