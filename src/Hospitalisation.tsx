@@ -223,7 +223,7 @@ export default function Hospitalisation({
                 <option value="">Choisir…</option>
                 {patients.map((p) => (
                   <option key={p.id} value={p.id}>
-                    {p.nom} {p.prenom ?? ''} — {p.numeroDossier}
+                    {p.lastName} {p.firstName} — {p.recordNumber}
                   </option>
                 ))}
               </select>
