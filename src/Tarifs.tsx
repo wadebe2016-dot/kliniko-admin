@@ -244,10 +244,6 @@ export default function Tarifs({
             >
               Ajouter à la mercuriale
             </button>
-            <p className="muted">
-              Un nouveau tarif prend effet immédiatement ; l'ancien est archivé
-              et les factures déjà émises ne changent jamais.
-            </p>
 
             <h2 style={{ marginTop: 18 }}>Nouveau médicament</h2>
             <div className="field">
