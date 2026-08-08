@@ -1062,6 +1062,7 @@ export type MouvementConsommable = {
   datePeremption: string | null;
   motif: string | null;
   createdAt: string;
+  dateMouvement: string;
   consommable: { designation: string; unite: string | null };
 };
 
@@ -1098,6 +1099,7 @@ export async function entreeConsommable(data: {
   datePeremption?: string;
   prixAchat?: number;
   motif?: string;
+  date?: string;
 }): Promise<void> {
   const res = await appelApi('/consommables/entrees', {
     method: 'POST',
@@ -1111,6 +1113,7 @@ export async function sortieConsommable(data: {
   consommableId: string;
   quantite: number;
   motif: string;
+  date?: string;
 }): Promise<void> {
   const res = await appelApi('/consommables/sorties', {
     method: 'POST',
@@ -1752,4 +1755,12 @@ export async function getAnalytique(
   const res = await appelApi(`/tresorerie/analytique${q ? `?${q}` : ''}`);
   if (!res.ok) await echecOrdonnance(res, "Erreur lors du chargement de l'analytique");
   return res.json();
+}
+
+export async function supprimerMouvementConsommable(id: string): Promise<void> {
+  const res = await appelApi(
+    `/consommables/mouvements/${encodeURIComponent(id)}`,
+    { method: 'DELETE' },
+  );
+  if (!res.ok) await echecOrdonnance(res, 'Erreur lors de la suppression du mouvement');
 }

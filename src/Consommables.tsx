@@ -5,6 +5,7 @@ import {
   creerConsommable,
   entreeConsommable,
   sortieConsommable,
+  supprimerMouvementConsommable,
   aPermission,
   type ArticleConsommable,
   type MouvementConsommable,
@@ -13,19 +14,27 @@ import {
 const XAF = (n: number) => n.toLocaleString('fr-FR') + ' XAF';
 const jour = (iso: string | null) =>
   iso ? new Date(iso).toLocaleDateString('fr-FR') : '—';
-const quand = (iso: string) =>
-  new Date(iso).toLocaleString('fr-FR', {
-    day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
-    timeZone: 'Africa/Douala',
-  });
+const isoJour = (d: Date) => d.toISOString().slice(0, 10);
 
-const TYPE_LIBELLE = { entree: 'Entrée', sortie: 'Sortie', ajustement: 'Ajustement' };
+const MODALE = {
+  position: 'fixed',
+  inset: 0,
+  background: 'rgba(12, 42, 40, 0.45)',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  zIndex: 50,
+} as const;
+
+type Vue = 'articles' | 'mouvements';
+type Modale = 'article' | 'entree' | 'sortie' | null;
 
 export default function Consommables({
   onSessionExpiree,
 }: {
   onSessionExpiree: () => void;
 }) {
+  const [vue, setVue] = useState<Vue>('articles');
   const [stock, setStock] = useState<ArticleConsommable[]>([]);
   const [mouvements, setMouvements] = useState<MouvementConsommable[]>([]);
   const [chargement, setChargement] = useState(true);
@@ -33,18 +42,25 @@ export default function Consommables({
   const [info, setInfo] = useState<string | null>(null);
   const [enCours, setEnCours] = useState(false);
 
-  // Entree de stock
-  const [eArticle, setEArticle] = useState('');
-  const [eQuantite, setEQuantite] = useState(10);
-  const [ePeremption, setEPeremption] = useState('');
-  const [eMotif, setEMotif] = useState('');
+  // Filtres du journal
+  const [fArticle, setFArticle] = useState('');
+  const [recherche, setRecherche] = useState('');
 
-  // Sortie de consommation
-  const [sArticle, setSArticle] = useState('');
-  const [sQuantite, setSQuantite] = useState(1);
-  const [sMotif, setSMotif] = useState('');
+  // Modales
+  const [modale, setModale] = useState<Modale>(null);
+  const [mErreur, setMErreur] = useState<string | null>(null);
+  const [aSupprimer, setASupprimer] = useState<MouvementConsommable | null>(
+    null,
+  );
 
-  // Nouveau consommable
+  // Entree / sortie
+  const [mArticle, setMArticle] = useState('');
+  const [mQuantite, setMQuantite] = useState(1);
+  const [mDate, setMDate] = useState(isoJour(new Date()));
+  const [mPeremption, setMPeremption] = useState('');
+  const [mMotif, setMMotif] = useState('');
+
+  // Nouvel article
   const [cDesignation, setCDesignation] = useState('');
   const [cUnite, setCUnite] = useState('');
   const [cSeuil, setCSeuil] = useState(10);
@@ -81,79 +97,83 @@ export default function Consommables({
     charger();
   }, [charger]);
 
-  async function validerEntree() {
-    if (!eArticle) {
-      setErreur('Choisissez un article');
-      return;
-    }
-    setEnCours(true);
-    setErreur(null);
+  function ouvrir(m: Exclude<Modale, null>) {
+    setMArticle('');
+    setMQuantite(m === 'entree' ? 10 : 1);
+    setMDate(isoJour(new Date()));
+    setMPeremption('');
+    setMMotif('');
+    setCDesignation('');
+    setCUnite('');
+    setCSeuil(10);
+    setMErreur(null);
     setInfo(null);
+    setModale(m);
+  }
+
+  async function validerModale() {
+    setMErreur(null);
     try {
-      await entreeConsommable({
-        consommableId: eArticle,
-        quantite: eQuantite,
-        datePeremption: ePeremption || undefined,
-        motif: eMotif.trim() || undefined,
-      });
-      setEQuantite(10);
-      setEPeremption('');
-      setEMotif('');
-      setInfo('Entrée enregistrée.');
+      if (modale === 'article') {
+        if (!cDesignation.trim()) {
+          setMErreur('Indiquez la désignation');
+          return;
+        }
+        setEnCours(true);
+        await creerConsommable({
+          designation: cDesignation.trim(),
+          unite: cUnite.trim() || undefined,
+          seuilAlerte: cSeuil,
+        });
+        setInfo('Article ajouté au catalogue.');
+      } else if (modale === 'entree') {
+        if (!mArticle) {
+          setMErreur('Choisissez un article');
+          return;
+        }
+        setEnCours(true);
+        await entreeConsommable({
+          consommableId: mArticle,
+          quantite: mQuantite,
+          date: mDate || undefined,
+          datePeremption: mPeremption || undefined,
+          motif: mMotif.trim() || undefined,
+        });
+        setInfo('Entrée enregistrée.');
+      } else if (modale === 'sortie') {
+        if (!mArticle || !mMotif.trim()) {
+          setMErreur("Choisissez l'article et indiquez le service ou motif");
+          return;
+        }
+        setEnCours(true);
+        await sortieConsommable({
+          consommableId: mArticle,
+          quantite: mQuantite,
+          date: mDate || undefined,
+          motif: mMotif.trim(),
+        });
+        setInfo('Sortie enregistrée.');
+      }
+      setModale(null);
       await charger();
     } catch (e) {
-      traiter(e);
+      setMErreur((e as Error).message);
     } finally {
       setEnCours(false);
     }
   }
 
-  async function validerSortie() {
-    if (!sArticle || !sMotif.trim()) {
-      setErreur("Choisissez l'article et indiquez le service ou le motif");
-      return;
-    }
+  async function confirmerSuppression() {
+    if (!aSupprimer) return;
     setEnCours(true);
-    setErreur(null);
-    setInfo(null);
+    setMErreur(null);
     try {
-      await sortieConsommable({
-        consommableId: sArticle,
-        quantite: sQuantite,
-        motif: sMotif.trim(),
-      });
-      setSQuantite(1);
-      setSMotif('');
-      setInfo('Consommation enregistrée.');
+      await supprimerMouvementConsommable(aSupprimer.id);
+      setASupprimer(null);
+      setInfo('Mouvement supprimé — le stock est recalculé.');
       await charger();
     } catch (e) {
-      traiter(e);
-    } finally {
-      setEnCours(false);
-    }
-  }
-
-  async function validerCreation() {
-    if (!cDesignation.trim()) {
-      setErreur('Indiquez la désignation du consommable');
-      return;
-    }
-    setEnCours(true);
-    setErreur(null);
-    setInfo(null);
-    try {
-      await creerConsommable({
-        designation: cDesignation.trim(),
-        unite: cUnite.trim() || undefined,
-        seuilAlerte: cSeuil,
-      });
-      setCDesignation('');
-      setCUnite('');
-      setCSeuil(10);
-      setInfo('Consommable ajouté au catalogue.');
-      await charger();
-    } catch (e) {
-      traiter(e);
+      setMErreur((e as Error).message);
     } finally {
       setEnCours(false);
     }
@@ -161,149 +181,80 @@ export default function Consommables({
 
   const alertes = stock.filter((a) => a.sousSeuil || a.peremptionProche);
 
+  const r = recherche.trim().toLowerCase();
+  const journal = mouvements.filter(
+    (m) =>
+      (!fArticle || m.consommable.designation === fArticle) &&
+      (!r ||
+        m.consommable.designation.toLowerCase().includes(r) ||
+        (m.motif ?? '').toLowerCase().includes(r)),
+  );
+
+  const sens = (m: MouvementConsommable) =>
+    m.type === 'entree' ? (
+      <span style={{ color: '#1c6b3c', fontWeight: 600 }}>+ Entrée</span>
+    ) : m.type === 'sortie' ? (
+      <span style={{ color: '#b91c1c', fontWeight: 600 }}>− Sortie</span>
+    ) : (
+      <span style={{ color: '#b7791f', fontWeight: 600 }}>Ajustement</span>
+    );
+
   return (
     <>
-      {peutGerer && (
-        <section className="card form-card">
-          <h2>Entrée de stock</h2>
-          <div className="form">
-            <div className="field">
-              <label>Article</label>
-              <select value={eArticle} onChange={(e) => setEArticle(e.target.value)}>
-                <option value="">Choisir…</option>
-                {stock.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.designation} (stock : {a.stock})
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="row">
-              <div className="field">
-                <label>Quantité reçue</label>
-                <input
-                  type="number"
-                  min={1}
-                  value={eQuantite}
-                  onChange={(e) => setEQuantite(Number(e.target.value))}
-                />
-              </div>
-              <div className="field">
-                <label>Péremption</label>
-                <input
-                  type="date"
-                  value={ePeremption}
-                  onChange={(e) => setEPeremption(e.target.value)}
-                />
-              </div>
-            </div>
-            <div className="field">
-              <label>Référence / motif</label>
-              <input
-                value={eMotif}
-                onChange={(e) => setEMotif(e.target.value)}
-                placeholder="Bon de livraison n° …"
-              />
-            </div>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
+        <button
+          type="button"
+          className={vue === 'articles' ? 'btn-primary' : ''}
+          onClick={() => setVue('articles')}
+        >
+          Articles
+        </button>
+        <button
+          type="button"
+          className={vue === 'mouvements' ? 'btn-primary' : ''}
+          onClick={() => setVue('mouvements')}
+        >
+          Mouvements
+        </button>
+        {peutGerer && (
+          <>
+            <span style={{ flex: 1 }} />
+            <button type="button" className="btn-primary" onClick={() => ouvrir('article')}>
+              + Nouvel article
+            </button>
             <button
               type="button"
-              className="btn-primary"
-              disabled={enCours}
-              onClick={validerEntree}
+              style={{ background: '#1c6b3c', color: '#fff', border: 'none' }}
+              onClick={() => ouvrir('entree')}
             >
-              Enregistrer l'entrée
+              + Entrée
             </button>
-
-            <h2 style={{ marginTop: 18 }}>Sortie de consommation</h2>
-            <div className="field">
-              <label>Article</label>
-              <select value={sArticle} onChange={(e) => setSArticle(e.target.value)}>
-                <option value="">Choisir…</option>
-                {stock.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.designation} (stock : {a.stock})
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="row">
-              <div className="field">
-                <label>Quantité</label>
-                <input
-                  type="number"
-                  min={1}
-                  value={sQuantite}
-                  onChange={(e) => setSQuantite(Number(e.target.value))}
-                />
-              </div>
-              <div className="field">
-                <label>Service / motif</label>
-                <input
-                  value={sMotif}
-                  onChange={(e) => setSMotif(e.target.value)}
-                  placeholder="Salle de soins, bloc…"
-                />
-              </div>
-            </div>
             <button
               type="button"
-              className="btn-primary"
-              disabled={enCours}
-              onClick={validerSortie}
+              style={{ background: '#9c2f2f', color: '#fff', border: 'none' }}
+              onClick={() => ouvrir('sortie')}
             >
-              Enregistrer la sortie
+              − Sortie
             </button>
+          </>
+        )}
+      </div>
 
-            <h2 style={{ marginTop: 18 }}>Nouveau consommable</h2>
-            <div className="field">
-              <label>Désignation</label>
-              <input
-                value={cDesignation}
-                onChange={(e) => setCDesignation(e.target.value)}
-                placeholder="Masques chirurgicaux…"
-              />
-            </div>
-            <div className="row">
-              <div className="field">
-                <label>Unité</label>
-                <input
-                  value={cUnite}
-                  onChange={(e) => setCUnite(e.target.value)}
-                  placeholder="boîte de 50, rouleau…"
-                />
-              </div>
-              <div className="field">
-                <label>Seuil d'alerte</label>
-                <input
-                  type="number"
-                  min={0}
-                  value={cSeuil}
-                  onChange={(e) => setCSeuil(Number(e.target.value))}
-                />
-              </div>
-            </div>
-            <button type="button" disabled={enCours} onClick={validerCreation}>
-              Ajouter au catalogue
-            </button>
-            {erreur && <p className="error">{erreur}</p>}
-            {info && <p className="muted">{info}</p>}
+      {erreur && <p className="error">{erreur}</p>}
+      {info && <p className="muted">{info}</p>}
+      {chargement && <p className="muted">Chargement…</p>}
+
+      {!chargement && vue === 'articles' && (
+        <section className="card list-card">
+          <div className="list-header">
+            <h2>Stock</h2>
+            <span className="count">{stock.length}</span>
+            {alertes.length > 0 && (
+              <span className="count" style={{ background: '#fdece7', color: '#8c3520' }}>
+                {alertes.length} alerte{alertes.length > 1 ? 's' : ''}
+              </span>
+            )}
           </div>
-        </section>
-      )}
-
-      <section className="card list-card">
-        <div className="list-header">
-          <h2>Stock</h2>
-          <span className="count">{stock.length}</span>
-          {alertes.length > 0 && (
-            <span className="count" style={{ background: '#fdece7', color: '#8c3520' }}>
-              {alertes.length} alerte{alertes.length > 1 ? 's' : ''}
-            </span>
-          )}
-        </div>
-        {chargement && <p className="muted">Chargement…</p>}
-        {!peutGerer && erreur && <p className="error">{erreur}</p>}
-        {!chargement && (
           <table className="table">
             <thead>
               <tr>
@@ -340,44 +291,244 @@ export default function Consommables({
               ))}
             </tbody>
           </table>
-        )}
-      </section>
+        </section>
+      )}
 
-      <section className="card">
-        <div className="list-header">
-          <h2>Derniers mouvements</h2>
-        </div>
-        {mouvements.length === 0 && (
-          <p className="muted">Aucun mouvement pour le moment.</p>
-        )}
-        {mouvements.length > 0 && (
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Quand</th>
-                <th>Type</th>
-                <th>Article</th>
-                <th>Qté</th>
-                <th>Motif</th>
-              </tr>
-            </thead>
-            <tbody>
-              {mouvements.map((m) => (
-                <tr key={m.id}>
-                  <td className="mono">{quand(m.createdAt)}</td>
-                  <td>{TYPE_LIBELLE[m.type]}</td>
-                  <td>{m.consommable.designation}</td>
-                  <td className="mono">
-                    {m.type === 'sortie' ? '-' : m.type === 'entree' ? '+' : ''}
-                    {m.quantite}
-                  </td>
-                  <td className="muted">{m.motif ?? ''}</td>
-                </tr>
+      {!chargement && vue === 'mouvements' && (
+        <section className="card list-card">
+          <div className="list-header">
+            <h2>Mouvements</h2>
+            <span className="count">{journal.length}</span>
+          </div>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+            <select value={fArticle} onChange={(e) => setFArticle(e.target.value)}>
+              <option value="">Article — *</option>
+              {stock.map((a) => (
+                <option key={a.id} value={a.designation}>
+                  {a.designation}
+                </option>
               ))}
-            </tbody>
-          </table>
-        )}
-      </section>
+            </select>
+            <input
+              value={recherche}
+              onChange={(e) => setRecherche(e.target.value)}
+              placeholder="Rechercher…"
+              style={{ flex: 1, minWidth: 160 }}
+            />
+          </div>
+          {journal.length === 0 && (
+            <p className="muted">Aucun mouvement pour ce filtre.</p>
+          )}
+          {journal.length > 0 && (
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Article</th>
+                  <th>Sens</th>
+                  <th>Quantité</th>
+                  <th>Motif</th>
+                  <th>Origine</th>
+                  {peutGerer && <th />}
+                </tr>
+              </thead>
+              <tbody>
+                {journal.map((m) => (
+                  <tr key={m.id}>
+                    <td className="mono">{jour(m.dateMouvement)}</td>
+                    <td>{m.consommable.designation}</td>
+                    <td>{sens(m)}</td>
+                    <td className="mono">
+                      {m.quantite} {m.consommable.unite ?? ''}
+                    </td>
+                    <td className="muted">{m.motif ?? ''}</td>
+                    <td className="muted">Manuel</td>
+                    {peutGerer && (
+                      <td>
+                        <button
+                          type="button"
+                          title="Supprimer ce mouvement"
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            cursor: 'pointer',
+                            color: '#9c2f2f',
+                            fontSize: 15,
+                          }}
+                          onClick={() => {
+                            setMErreur(null);
+                            setASupprimer(m);
+                          }}
+                        >
+                          🗑
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </section>
+      )}
+
+      {modale && (
+        <div style={MODALE} onClick={() => !enCours && setModale(null)}>
+          <div
+            className="card"
+            style={{ width: 'min(440px, 92vw)' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2>
+              {modale === 'article'
+                ? 'Nouvel article'
+                : modale === 'entree'
+                  ? 'Entrée de stock'
+                  : 'Sortie de consommation'}
+            </h2>
+            <div className="form">
+              {modale === 'article' ? (
+                <>
+                  <div className="field">
+                    <label>Désignation</label>
+                    <input
+                      value={cDesignation}
+                      onChange={(e) => setCDesignation(e.target.value)}
+                      placeholder="Masques chirurgicaux…"
+                    />
+                  </div>
+                  <div className="row">
+                    <div className="field">
+                      <label>Unité</label>
+                      <input
+                        value={cUnite}
+                        onChange={(e) => setCUnite(e.target.value)}
+                        placeholder="boîte de 50, rouleau…"
+                      />
+                    </div>
+                    <div className="field">
+                      <label>Seuil d'alerte</label>
+                      <input
+                        type="number"
+                        min={0}
+                        value={cSeuil}
+                        onChange={(e) => setCSeuil(Number(e.target.value))}
+                      />
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="field">
+                    <label>Article</label>
+                    <select value={mArticle} onChange={(e) => setMArticle(e.target.value)}>
+                      <option value="">Choisir…</option>
+                      {stock.map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {a.designation} (stock : {a.stock})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="row">
+                    <div className="field">
+                      <label>Quantité</label>
+                      <input
+                        type="number"
+                        min={1}
+                        value={mQuantite}
+                        onChange={(e) => setMQuantite(Number(e.target.value))}
+                      />
+                    </div>
+                    <div className="field">
+                      <label>Date</label>
+                      <input
+                        type="date"
+                        value={mDate}
+                        onChange={(e) => setMDate(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  {modale === 'entree' && (
+                    <div className="field">
+                      <label>Péremption (si applicable)</label>
+                      <input
+                        type="date"
+                        value={mPeremption}
+                        onChange={(e) => setMPeremption(e.target.value)}
+                      />
+                    </div>
+                  )}
+                  <div className="field">
+                    <label>
+                      {modale === 'entree' ? 'Référence / motif' : 'Service / motif'}
+                    </label>
+                    <input
+                      value={mMotif}
+                      onChange={(e) => setMMotif(e.target.value)}
+                      placeholder={
+                        modale === 'entree'
+                          ? 'Stock initial, bon de livraison n°…'
+                          : 'Salle de soins, bloc…'
+                      }
+                    />
+                  </div>
+                </>
+              )}
+              {mErreur && <p className="error">{mErreur}</p>}
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                <button type="button" disabled={enCours} onClick={() => setModale(null)}>
+                  Annuler
+                </button>
+                <button
+                  type="button"
+                  className="btn-primary"
+                  disabled={enCours}
+                  onClick={validerModale}
+                >
+                  {enCours ? 'Enregistrement…' : 'Enregistrer'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {aSupprimer && (
+        <div style={MODALE} onClick={() => !enCours && setASupprimer(null)}>
+          <div
+            className="card"
+            style={{ width: 'min(440px, 92vw)' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2>Supprimer ce mouvement ?</h2>
+            <p>
+              {jour(aSupprimer.dateMouvement)} — {aSupprimer.consommable.designation},{' '}
+              {aSupprimer.type === 'sortie' ? '−' : '+'}
+              {aSupprimer.quantite} {aSupprimer.consommable.unite ?? ''}
+              {aSupprimer.motif ? ` (${aSupprimer.motif})` : ''}
+            </p>
+            <p className="muted">
+              Le stock sera recalculé sans cette ligne. La suppression est
+              refusée si le stock devenait négatif.
+            </p>
+            {mErreur && <p className="error">{mErreur}</p>}
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button type="button" disabled={enCours} onClick={() => setASupprimer(null)}>
+                Annuler
+              </button>
+              <button
+                type="button"
+                disabled={enCours}
+                style={{ background: '#9c2f2f', color: '#fff', border: 'none' }}
+                onClick={confirmerSuppression}
+              >
+                {enCours ? 'Suppression…' : 'Supprimer'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
