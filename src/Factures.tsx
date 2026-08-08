@@ -15,6 +15,7 @@ import {
   type Patient,
   type StatutFacture,
 } from './api';
+import QRCode from 'qrcode';
 
 const STATUT_LABEL: Record<StatutFacture, string> = {
   ouverte: 'Ouverte',
@@ -48,6 +49,186 @@ const LIBELLE_STATUT_CAMPAY: Record<string, string> = {
   FAILED: 'échoué',
 };
 
+function echapper(t: string | null | undefined): string {
+  return (t ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+// La clinique affichee en tete du recu. La surface publique la fournit ;
+// tant que Kliniko sert une clinique a la fois, la premiere est la bonne.
+type CliniquePublique = {
+  id: string;
+  nom: string;
+  ville: string | null;
+  telephone: string | null;
+};
+
+async function cliniqueDuRecu(): Promise<CliniquePublique | null> {
+  try {
+    const res = await fetch('/api/public/cliniques');
+    if (!res.ok) return null;
+    const liste = (await res.json()) as CliniquePublique[];
+    return liste[0] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+// Le recu de caisse : une page compacte, verifiable par code QR.
+function gabaritRecu(
+  f: Facture,
+  clinique: CliniquePublique | null,
+  qr: string,
+): string {
+  const infos = f as unknown as { dateFacture?: string; createdAt?: string };
+  const date = new Date(
+    infos.dateFacture ?? infos.createdAt ?? Date.now(),
+  ).toLocaleDateString('fr-FR');
+  const patient = `${f.patient.nom} ${f.patient.prenom ?? ''}`.trim();
+  const reste = Number(f.montantTotal) - Number(f.montantPaye);
+  const paiements = (f.paiements ?? []) as unknown as PaiementAffiche[];
+
+  const lignes = (f.lignes ?? [])
+    .map(
+      (l) => `
+      <tr>
+        <td>${echapper(l.libelle)}</td>
+        <td class="mono centre">${l.quantite}</td>
+        <td class="mono droite">${fmt(l.prixUnitaire)}</td>
+        <td class="mono droite">${fmt(l.montant)}</td>
+      </tr>`,
+    )
+    .join('');
+
+  const listePaiements = paiements
+    .filter((p) => !p.campayStatut || p.campayStatut === 'SUCCESSFUL')
+    .map(
+      (p) => `
+      <tr>
+        <td>${new Date(p.datePaiement).toLocaleDateString('fr-FR')}</td>
+        <td>${p.moyen === 'especes' ? 'Espèces' : 'Mobile Money'}</td>
+        <td class="mono droite">${fmt(p.montant)}</td>
+      </tr>`,
+    )
+    .join('');
+
+  const COULEURS: Record<StatutFacture, [string, string]> = {
+    ouverte: ['#e2ecfb', '#1d4f91'],
+    partielle: ['#fdf3e2', '#b7791f'],
+    reglee: ['#e6f4ec', '#1c6b3c'],
+    annulee: ['#fdece7', '#b91c1c'],
+  };
+  const [fond, encre] = COULEURS[f.statut];
+
+  return `<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8"><title>${echapper(f.numero)}</title>
+<style>
+  @page { size: A4; margin: 14mm 15mm; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "Segoe UI", Helvetica, Arial, sans-serif; color: #1c2430;
+         font-size: 10.5pt; padding: 16px; max-width: 640px; }
+  @media print { body { padding: 0; } }
+  .entete { display: flex; justify-content: space-between; align-items: flex-start;
+            border-bottom: 3px solid #0f766e; padding-bottom: 12px; }
+  .clinique h1 { font-size: 17pt; color: #0f766e; }
+  .clinique p { color: #5b6572; font-size: 9.5pt; margin-top: 4px; }
+  .cartouche { border: 1.5px solid #0f766e; border-radius: 8px; padding: 8px 14px;
+               text-align: right; flex: none; }
+  .cartouche .no { font-weight: 700; color: #0f766e; font-size: 11pt; white-space: nowrap; }
+  .cartouche .dt { color: #5b6572; font-size: 9.5pt; margin-top: 2px; }
+  .titre { display: flex; align-items: center; gap: 14px; margin: 18px 0 6px;
+           font-size: 12pt; letter-spacing: 4px; font-weight: 600; }
+  .titre::before, .titre::after { content: ''; flex: 1; border-top: 1px solid #cbd5e1; }
+  .statut { text-align: center; margin-bottom: 14px; }
+  .statut span { display: inline-block; background: ${fond}; color: ${encre};
+                 border-radius: 999px; padding: 4px 16px; font-weight: 700;
+                 letter-spacing: 1px; font-size: 10.5pt; }
+  .patient { background: #f4f7f6; border: 1px solid #e2e8f0; border-radius: 8px;
+             padding: 8px 14px; margin-bottom: 14px; }
+  .patient .lab { font-size: 8pt; letter-spacing: 2px; color: #0f766e; font-weight: 700; }
+  .patient .nom { font-weight: 700; font-size: 11pt; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 4px; }
+  th { text-align: left; font-size: 8.5pt; letter-spacing: 1px; color: #5b6572;
+       border-bottom: 1.5px solid #cbd5e1; padding: 5px 6px; }
+  td { padding: 6px; border-bottom: 1px dashed #e2e8f0; font-size: 10pt; }
+  .mono { font-variant-numeric: tabular-nums; }
+  .droite { text-align: right; }
+  .centre { text-align: center; }
+  th.droite { text-align: right; }
+  .totaux { margin: 10px 0 4px; display: flex; flex-direction: column; align-items: flex-end;
+            gap: 3px; font-size: 10.5pt; }
+  .totaux .grand { font-size: 12.5pt; font-weight: 700; color: #0f766e; }
+  .sous { color: #5b6572; font-size: 9pt; letter-spacing: 1px; margin: 14px 0 4px;
+          font-weight: 700; }
+  .verif { display: flex; align-items: center; gap: 8px; margin-top: 18px; }
+  .verif img { width: 20mm; height: 20mm; }
+  .verif .note { font-size: 8pt; color: #8a94a1; line-height: 1.5; }
+  .pied { border-top: 1px solid #e2e8f0; margin-top: 16px; padding-top: 6px;
+          font-size: 8.5pt; color: #8a94a1; text-align: center; }
+</style></head><body>
+<header class="entete">
+  <div class="clinique">
+    <h1>${echapper(clinique?.nom ?? 'Kliniko')}</h1>
+    <p>${[echapper(clinique?.ville), echapper(clinique?.telephone)].filter(Boolean).join(' — ')}</p>
+  </div>
+  <div class="cartouche">
+    <div class="no">${echapper(f.numero)}</div>
+    <div class="dt">${date}</div>
+  </div>
+</header>
+<div class="titre">REÇU DE CAISSE</div>
+<div class="statut"><span>${
+    { ouverte: 'NON RÉGLÉE', partielle: 'PAIEMENT PARTIEL', reglee: 'RÉGLÉE', annulee: 'ANNULÉE' }[f.statut]
+  }</span></div>
+<div class="patient">
+  <div class="lab">PATIENT</div>
+  <div class="nom">${echapper(patient)}</div>
+</div>
+<table>
+  <thead><tr><th>DÉSIGNATION</th><th class="centre">QTÉ</th><th class="droite">P.U.</th><th class="droite">MONTANT</th></tr></thead>
+  <tbody>${lignes}</tbody>
+</table>
+<div class="totaux">
+  <div class="grand">Total : ${fmt(f.montantTotal)} ${f.devise}</div>
+  <div>Payé : <b>${fmt(f.montantPaye)} ${f.devise}</b></div>
+  ${reste > 0 ? `<div>Reste à payer : <b>${fmt(reste)} ${f.devise}</b></div>` : ''}
+</div>
+${
+  listePaiements
+    ? `<div class="sous">RÈGLEMENTS</div>
+<table>
+  <thead><tr><th>DATE</th><th>MOYEN</th><th class="droite">MONTANT</th></tr></thead>
+  <tbody>${listePaiements}</tbody>
+</table>`
+    : ''
+}
+${qr ? `<div class="verif"><img src="${qr}" alt="Code QR"><div class="note">Scannez pour vérifier<br>l'authenticité de ce reçu</div></div>` : ''}
+<div class="pied">${echapper(f.numero)} — ${echapper(clinique?.nom ?? 'Kliniko')} — édité via Kliniko</div>
+</body></html>`;
+}
+
+// Impression par cadre invisible (les bloqueurs de fenetres ne s'y opposent pas)
+function imprimerHtml(html: string) {
+  const cadre = document.createElement('iframe');
+  cadre.style.position = 'fixed';
+  cadre.style.right = '0';
+  cadre.style.bottom = '0';
+  cadre.style.width = '0';
+  cadre.style.height = '0';
+  cadre.style.border = '0';
+  document.body.appendChild(cadre);
+  const doc = cadre.contentWindow?.document;
+  if (!doc) return;
+  doc.open();
+  doc.write(html);
+  doc.close();
+  cadre.contentWindow?.focus();
+  cadre.contentWindow?.print();
+  window.setTimeout(() => document.body.removeChild(cadre), 2000);
+}
+
 type Props = {
   onSessionExpiree: () => void;
 };
@@ -70,6 +251,11 @@ function Factures({ onSessionExpiree }: Props) {
   const [telephone, setTelephone] = useState('');
   const [encaisseError, setEncaisseError] = useState<string | null>(null);
   const [encaissement, setEncaissement] = useState(false);
+
+  // Apercu du recu de caisse
+  const [recu, setRecu] = useState<{ numero: string; html: string } | null>(
+    null,
+  );
 
   // Paiement Mobile Money en cours de validation par le client
   const [attente, setAttente] = useState<DemandePaiementMobile | null>(null);
@@ -255,6 +441,20 @@ function Factures({ onSessionExpiree }: Props) {
     setMessagePaiement(null);
   }
 
+  async function ouvrirRecu(f: Facture) {
+    const clinique = await cliniqueDuRecu();
+    let qr = '';
+    try {
+      qr = await QRCode.toDataURL(
+        `${window.location.origin}/api/public/factures/${f.id}`,
+        { margin: 0, width: 240 },
+      );
+    } catch (e) {
+      console.error('Generation du code QR impossible', e);
+    }
+    setRecu({ numero: f.numero, html: gabaritRecu(f, clinique, qr) });
+  }
+
   const resteDetail = detail
     ? Number(detail.montantTotal) - Number(detail.montantPaye)
     : 0;
@@ -394,8 +594,19 @@ function Factures({ onSessionExpiree }: Props) {
             </h2>
             <button
               type="button"
+              className="btn-primary"
               style={{
                 marginLeft: 'auto',
+                padding: '2px 12px',
+                cursor: 'pointer',
+              }}
+              onClick={() => ouvrirRecu(detail)}
+            >
+              Reçu
+            </button>
+            <button
+              type="button"
+              style={{
                 padding: '2px 10px',
                 cursor: 'pointer',
               }}
@@ -544,6 +755,58 @@ function Factures({ onSessionExpiree }: Props) {
             )}
           {encaisseError && <p className="error">{encaisseError}</p>}
         </section>
+      )}
+
+      {recu && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(12, 42, 40, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 50,
+          }}
+          onClick={() => setRecu(null)}
+        >
+          <div
+            className="card"
+            style={{
+              width: 'min(760px, 96vw)',
+              maxHeight: '92vh',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 10,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <h2 style={{ marginRight: 'auto' }}>Reçu {recu.numero}</h2>
+              <button type="button" onClick={() => setRecu(null)}>
+                Fermer
+              </button>
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={() => imprimerHtml(recu.html)}
+              >
+                Imprimer
+              </button>
+            </div>
+            <iframe
+              title="Aperçu du reçu"
+              srcDoc={recu.html}
+              style={{
+                width: '100%',
+                height: '72vh',
+                border: '1px solid #e2e8f0',
+                borderRadius: 8,
+                background: '#fff',
+              }}
+            />
+          </div>
+        </div>
       )}
     </>
   );
